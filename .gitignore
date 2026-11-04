@@ -1,6 +1,26 @@
+# Abhängigkeiten und Build
 node_modules/
-data/
 web/dist/
+
+# Lokale Nutzerdaten: Datenbank, Rohdaten, Logs, Backups, Berichte (NIE ins Repository)
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.log
+logs/
+*.zip
+exports/
+reports/
+
+# Zugangsdaten
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Testartefakte
 extension/test/*.test.html
 extension/test/result.json
