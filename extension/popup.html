@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <title>MTG Deal Sniper</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      width: 400px;
+      min-height: 300px;
+      margin: 0;
+      font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: #1d2a20;
+      background: #fff;
+    }
+    header { padding: 10px 14px 0; }
+    h1 { margin: 0 0 8px; font-size: 16px; color: #1f9d55; }
+    nav { display: flex; gap: 2px; border-bottom: 1px solid #d5ded7; }
+    nav button {
+      flex: 1; padding: 6px 4px; border: 0; border-bottom: 2px solid transparent;
+      background: none; font: inherit; font-weight: 600; color: #5b6b60; cursor: pointer;
+    }
+    nav button.active { color: #1f9d55; border-bottom-color: #1f9d55; }
+    nav button:hover { color: #1d2a20; }
+    main { padding: 10px 14px 14px; }
+    section[hidden] { display: none; }
+
+    a { color: #17733f; }
+    .muted { color: #5b6b60; font-size: 11.5px; }
+    .btn { padding: 4px 10px; border: 1px solid #b8c7bc; border-radius: 4px; background: #fff; font: inherit; cursor: pointer; }
+    .btn:hover { background: #eef4ef; }
+    .btn-primary { background: #1f9d55; border-color: #1f9d55; color: #fff; }
+    .btn-primary:hover { background: #18804a; }
+    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+    /* --- Watchlist --- */
+    details.import { margin-bottom: 10px; border: 1px solid #d5ded7; border-radius: 6px; padding: 6px 10px; }
+    details.import summary { cursor: pointer; font-weight: 600; }
+    textarea { width: 100%; height: 110px; margin: 6px 0; padding: 6px; border: 1px solid #b8c7bc; border-radius: 4px; font: 12px/1.35 ui-monospace, Consolas, monospace; resize: vertical; }
+    #importMsg { font-size: 12px; }
+    .toolbar { justify-content: space-between; margin-bottom: 4px; }
+    ul { list-style: none; margin: 0; padding: 0; }
+    .wl li { padding: 6px 0; border-bottom: 1px solid #e6ece7; }
+    .wl .line1 { display: flex; align-items: center; gap: 6px; }
+    .wl .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1d2a20; text-decoration: none; font-weight: 600; }
+    .wl .name:hover { text-decoration: underline; }
+    .wl li.bought .name { text-decoration: line-through; color: #8a978e; font-weight: normal; }
+    .wl input.qty { width: 3.4em; padding: 1px 3px; border: 1px solid #c9d3cb; border-radius: 3px; font: inherit; text-align: right; }
+    .wl input.target { width: 5.6em; padding: 1px 4px; border: 1px solid #c9d3cb; border-radius: 3px; font: inherit; text-align: right; }
+    .wl .line2 { margin: 2px 0 0 24px; }
+    .down { color: #17733f; font-weight: 700; }
+    .up { color: #b42318; font-weight: 700; }
+    .hit { background: #ffcc33; color: #3b2a00; border-radius: 3px; padding: 0 4px; font-weight: 700; }
+    .del { border: 1px solid #d0d7d2; background: #fff; border-radius: 4px; cursor: pointer; padding: 0 6px; color: #b42318; }
+    .del:hover { background: #fdecea; }
+    .empty { color: #5b6b60; font-style: italic; padding: 8px 0; }
+
+    /* --- Bündeln --- */
+    .bundle { border: 1px solid #d5ded7; border-left: 4px solid #1f9d55; border-radius: 6px; padding: 8px 10px; margin-bottom: 8px; }
+    .bundle h3 { margin: 0; font-size: 14px; }
+    .bundle ul { margin: 4px 0; }
+    .bundle li { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; }
+    .bundle .sum { font-weight: 600; }
+    .save { color: #17733f; font-weight: 700; }
+    .nosave { color: #8a5a00; font-weight: normal; }
+    .bundle.worse { border-left-color: #c9d3cb; }
+    .missing { margin: 6px 0 10px; }
+    .missing a { margin-right: 8px; white-space: nowrap; }
+
+    /* --- Einstellungen --- */
+    fieldset { border: 1px solid #d5ded7; border-radius: 6px; margin: 0 0 10px; padding: 6px 10px 8px; }
+    legend { font-weight: 700; padding: 0 4px; }
+    .field { margin-bottom: 7px; }
+    .field > label, .field > .label { display: block; margin-bottom: 2px; font-weight: 600; }
+    input[type=number], input[type=text].money, select { width: 100%; padding: 3px 6px; border: 1px solid #b8c7bc; border-radius: 4px; font: inherit; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; }
+    .langs { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
+    .langs label, .check { display: flex; align-items: center; gap: 5px; font-weight: normal; }
+    #status { min-height: 1.2em; color: #1f9d55; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MTG Deal Sniper</h1>
+    <nav>
+      <button type="button" data-tab="watch" class="active">Watchlist</button>
+      <button type="button" data-tab="bundle">Bündeln</button>
+      <button type="button" data-tab="settings">Einstellungen</button>
+      <button type="button" data-tab="dashboard">Dashboard</button>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ===================== Watchlist ===================== -->
+    <section id="tab-watch">
+      <details class="import">
+        <summary>Deckliste einfügen</summary>
+        <textarea id="decklist" placeholder="4 Lightning Bolt&#10;1 Chrome Mox&#10;2x Counterspell (MH2) 267&#10;SB: 3 Pyroblast"></textarea>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="importBtn">Zur Watchlist hinzufügen</button>
+          <span id="importMsg" class="muted"></span>
+        </div>
+      </details>
+
+      <div class="row toolbar">
+        <span id="wlCount" class="muted"></span>
+        <button type="button" class="btn" id="clearBought">Gekaufte entfernen</button>
+      </div>
+      <ul class="wl" id="watchlist"></ul>
+      <p class="muted">Haken = gekauft. Feld rechts = Zielpreis (€<span class="incl"></span>, optional).
+        Preise stammen von Seiten, die du selbst geöffnet hast.</p>
+    </section>
+
+    <!-- ===================== Bündeln ===================== -->
+    <section id="tab-bundle" hidden>
+      <p id="bundleInfo" class="muted"></p>
+      <div id="bundleMissing" class="missing"></div>
+      <div id="bundles"></div>
+      <p class="muted">Vorschläge anhand der Angebote, die beim Öffnen der Kartenseiten sichtbar waren
+        (letzte 7 Tage, mit deinen Filtern). Bestände können sich inzwischen geändert haben.
+        „Spart“ = gegenüber Einzelkauf jeder Karte beim jeweils günstigsten Verkäufer inkl. Porto.</p>
+    </section>
+
+    <!-- ===================== Einstellungen ===================== -->
+    <section id="tab-settings" hidden>
+      <form id="settingsForm">
+        <fieldset>
+          <legend>Deals</legend>
+          <div class="grid2">
+            <div class="field">
+              <label for="threshold">Schwelle (Rabatt %)</label>
+              <input type="number" id="threshold" min="0" max="100" step="1">
+            </div>
+            <div class="field">
+              <label for="minCondition">Mindestzustand</label>
+              <select id="minCondition"></select>
+            </div>
+          </div>
+          <div class="field">
+            <label for="reference">Vergleichen mit</label>
+            <select id="reference"></select>
+          </div>
+          <div class="field">
+            <span class="label">Erlaubte Sprachen</span>
+            <div class="langs" id="languages"></div>
+          </div>
+          <label class="check"><input type="checkbox" id="includeFoil"> Foil-Angebote berücksichtigen</label>
+          <div class="muted">Der Trendpreis gilt für Nicht-Foil. Foils daran zu messen, kann irreführen.</div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Verkäufer</legend>
+          <div class="grid2">
+            <div class="field">
+              <label for="minSales">Mind. Verkäufe</label>
+              <input type="number" id="minSales" min="0" step="10">
+            </div>
+            <div class="field">
+              <label for="sellerType">Verkäufertyp</label>
+              <select id="sellerType"></select>
+            </div>
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>Porto</legend>
+          <label class="check"><input type="checkbox" id="shippingEnabled"> Porto in den Preis einrechnen</label>
+          <div class="field" style="margin-top:6px">
+            <label for="homeCountry">Dein Land</label>
+            <select id="homeCountry"></select>
+          </div>
+          <div class="grid2">
+            <div class="field"><label for="shipDomestic">Inland Brief</label><input type="text" class="money" id="shipDomestic" inputmode="decimal"></div>
+            <div class="field"><label for="shipDomesticTracked">Inland versichert</label><input type="text" class="money" id="shipDomesticTracked" inputmode="decimal"></div>
+            <div class="field"><label for="shipIntl">Ausland Brief</label><input type="text" class="money" id="shipIntl" inputmode="decimal"></div>
+            <div class="field"><label for="shipIntlTracked">Ausland versichert</label><input type="text" class="money" id="shipIntlTracked" inputmode="decimal"></div>
+          </div>
+          <div class="field">
+            <label for="trackedFrom">Versicherter Versand ab Warenwert (€)</label>
+            <input type="text" class="money" id="trackedFrom" inputmode="decimal">
+          </div>
+          <div class="muted">Die Standardwerte sind grobe Schätzungen. Trag am besten ein, was du bei
+            Cardmarket tatsächlich zahlst. Gerade der versicherte Versand ab einem bestimmten Warenwert
+            macht Bestellungen oft teurer als erwartet.</div>
+        </fieldset>
+
+        <div id="status" aria-live="polite"></div>
+      </form>
+    </section>
+
+    <!-- ===================== Dashboard (MTG Deal Sniper 2.0) ===================== -->
+    <section id="tab-dashboard" hidden>
+      <fieldset>
+        <legend>Lokales Dashboard</legend>
+        <p class="muted">Sendet die Angebote der Kartenseiten, die du <strong>selbst öffnest</strong>, an dein lokales
+          Dashboard. Dort werden sie mit allen Kosten bewertet; der Netto-Gewinn erscheint neben dem Preis.
+          Es werden keine Seiten nachgeladen und nichts an Dritte gesendet.</p>
+        <label class="check"><input type="checkbox" id="dashSync"> An Dashboard senden</label>
+        <div class="field" style="margin-top:6px">
+          <label for="dashUrl">Adresse</label>
+          <input type="text" class="money" id="dashUrl" placeholder="http://127.0.0.1:8787">
+        </div>
+        <div class="field">
+          <label for="dashToken">Token (Dashboard → Einstellungen)</label>
+          <input type="text" class="money" id="dashToken" autocomplete="off" spellcheck="false">
+        </div>
+        <div class="row">
+          <button type="button" class="btn btn-primary" id="dashSave">Speichern</button>
+          <button type="button" class="btn" id="dashTest">Verbindung testen</button>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Watchlist übernehmen</legend>
+        <p class="muted">Überträgt deine Watchlist einmalig ins Dashboard. Mehrfaches Senden verdoppelt nichts;
+          die Watchlist hier in der Erweiterung bleibt unverändert.</p>
+        <button type="button" class="btn" id="dashMigrate">Watchlist übertragen</button>
+      </fieldset>
+      <div id="dashStatus" class="muted" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <!-- parser.js + shared.js liefern Konstanten und Logik (eine gemeinsame Quelle mit der Seite). -->
+  <script src="parser.js"></script>
+  <script src="shared.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

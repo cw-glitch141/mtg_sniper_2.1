@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "MTG Deal Sniper",
+  "version": "2.0.0",
+  "description": "Hebt Magic-Angebote unter Marktwert auf Cardmarket-Kartenseiten hervor, führt eine Watchlist und kann gesehene Angebote an dein lokales Dashboard senden.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.cardmarket.com/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "MTG Deal Sniper",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.cardmarket.com/*/Magic/Products/Singles/*"],
+      "js": ["parser.js", "shared.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "name": "mtg-deal-sniper",
+  "version": "2.1.0",
+  "private": true,
+  "description": "MTG Deal Sniper 2.1 – Business Edition: Marktanalyse, Profit-Engine, Einkauf, Lager, Verkauf, Versand und Erfolgskontrolle für den Handel mit Magic-Karten.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning server/src/main.ts",
+    "dev:server": "node --disable-warning=ExperimentalWarning --watch server/src/main.ts",
+    "dev:web": "vite --config web/vite.config.ts",
+    "build": "vite build --config web/vite.config.ts",
+    "import": "node --disable-warning=ExperimentalWarning server/src/cli.ts import",
+    "analyze": "node --disable-warning=ExperimentalWarning server/src/cli.ts analyze",
+    "token": "node --disable-warning=ExperimentalWarning server/src/cli.ts token",
+    "test": "node --disable-warning=ExperimentalWarning --test \"server/test/**/*.test.ts\"",
+    "typecheck": "tsc -p server/tsconfig.json && tsc -p web/tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.4.1",
+    "qrcode-generator": "1.4.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}

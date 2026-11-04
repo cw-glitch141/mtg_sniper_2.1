@@ -1,0 +1,6 @@
+node_modules/
+data/
+web/dist/
+.env
+extension/test/*.test.html
+extension/test/result.json

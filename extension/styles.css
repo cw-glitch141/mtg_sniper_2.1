@@ -1,0 +1,128 @@
+/* MTG Deal Sniper – Styles für die Cardmarket-Seite.
+   Alle Klassen beginnen mit "mtgds-", um Konflikte mit Cardmarket zu vermeiden. */
+
+/* --- Deal-Zeile: grün hinterlegt ---
+   Halbtransparentes Overlay per ::after über der ganzen Zeile. So bleibt die
+   Textfarbe von Cardmarket im hellen wie im dunklen Theme lesbar, und eigene
+   Hintergründe der Zellen (Dark Mode, .table-striped) verdecken die Farbe nicht.
+   pointer-events: none → Links und Buttons bleiben klickbar. */
+.article-row.mtgds-deal,
+.article-row.mtgds-watch-hit {
+  position: relative;
+}
+.article-row.mtgds-deal::after,
+.article-row.mtgds-watch-hit::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.article-row.mtgds-deal::after {
+  background: rgba(31, 190, 95, .22);
+  box-shadow: inset 5px 0 0 #1fbe5f;
+}
+
+/* --- Watchlist-Treffer: goldener Rahmen (+ leichte Tönung, wenn nicht zugleich Deal) --- */
+.article-row.mtgds-watch-hit::after {
+  outline: 2px solid #f0b400;
+  outline-offset: -2px;
+}
+.article-row.mtgds-watch-hit:not(.mtgds-deal)::after {
+  background: rgba(240, 180, 0, .14);
+}
+
+/* --- Rabatt-Badge neben dem Preis --- */
+.mtgds-badge {
+  display: inline-block;
+  margin-right: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #1f9d55;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+/* --- Netto-Gewinn laut Dashboard (hinter dem Preis) --- */
+.mtgds-badge.mtgds-eval {
+  margin: 0 0 0 6px;
+  background: #5b6b60;
+  position: relative;
+  z-index: 2;
+}
+.mtgds-badge.mtgds-eval-buy {
+  background: #0a6e0a;
+  box-shadow: 0 0 0 1px #6fd36f;
+}
+
+/* --- Panel oben auf der Seite --- */
+.mtgds-panel {
+  margin: 8px 0 12px;
+  padding: 10px 14px;
+  border: 1px solid #c9d6cc;
+  border-left: 4px solid #1f9d55;
+  border-radius: 6px;
+  background: #f6fbf7;
+  color: #1d2a20;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.mtgds-summary { font-size: 15px; }
+.mtgds-details { margin-top: 2px; font-size: 12px; color: #5b6b60; }
+
+.mtgds-alert {
+  margin: -2px 0 8px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: #ffcc33;
+  color: #3b2a00;
+  font-size: 15px;
+  box-shadow: 0 0 0 2px #e0a800;
+  animation: mtgds-pulse 1.4s ease-in-out 3;
+}
+@keyframes mtgds-pulse {
+  50% { box-shadow: 0 0 0 5px rgba(224, 168, 0, .35); }
+}
+
+.mtgds-watch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+.mtgds-watch-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.mtgds-watch-form label { margin: 0; }
+.mtgds-watch-form input.mtgds-qty { width: 4em; }
+.mtgds-watch-form input {
+  width: 7em;
+  padding: 2px 6px;
+  border: 1px solid #9fb3a5;
+  border-radius: 4px;
+}
+.mtgds-btn {
+  padding: 3px 10px;
+  border: 1px solid #9fb3a5;
+  border-radius: 4px;
+  background: #fff;
+  color: #1d2a20;
+  font-size: 13px;
+  cursor: pointer;
+}
+.mtgds-btn:hover { background: #eef4ef; }
+.mtgds-btn-primary {
+  border-color: #1f9d55;
+  background: #1f9d55;
+  color: #fff;
+}
+.mtgds-btn-primary:hover { background: #18804a; }
+.mtgds-error { color: #b42318; font-size: 12px; }
