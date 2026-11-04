@@ -18,6 +18,8 @@ import { buildExposure } from '../services/portfolio.ts';
 import { logRecommendations } from '../services/analysis.ts';
 import { evaluateOffer, ingestOffers, listOffers, parseOfferCsv } from '../services/offers.ts';
 import { alertsForOffers, analyzeAndAlert, runPipeline, type Scheduler } from '../services/pipeline.ts';
+import { listEvents, listTargets, liveStatus, pollProvider, refreshTargets, type LiveRadar } from '../services/liveRadar.ts';
+import { buildQualityReport, latestQualityReport, saveQualityReport } from '../services/qualityReport.ts';
 import { getGuide, getHistory, getProduct, searchProducts } from '../services/products.ts';
 import { clearSimulation, generateSimulation } from '../services/simulation.ts';
 import { addWatch, deleteWatch, importLegacyWatchlist, listWatch, nameKey, updateWatch, validateWatch, type WatchInput } from '../services/watchlist.ts';
@@ -42,7 +44,7 @@ const csvStr = (v: unknown) => {
   return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 };
 
-export function registerRoutes(r: Router, ctx: AppContext, scheduler: Scheduler | null, token: string): void {
+export function registerRoutes(r: Router, ctx: AppContext, scheduler: Scheduler | null, token: string, radar?: LiveRadar): void {
   const { db } = ctx;
   const S = () => ctx.settings.get();
 
@@ -69,6 +71,11 @@ export function registerRoutes(r: Router, ctx: AppContext, scheduler: Scheduler 
     }
     if ((counts?.historyDays ?? 0) < 7) warnings.push(`Eigene Preishistorie umfasst erst ${counts?.historyDays ?? 0} Tag(e) – Historien-Kennzahlen (7/30 Tage, Volatilität) sind noch eingeschränkt.`);
     if (!counts?.liveOffers) warnings.push('Keine beobachteten Live-Angebote: Kaufempfehlungen entstehen erst mit Angeboten aus der Browser-Erweiterung oder dem manuellen Import. Marktsignale sind keine kaufbaren Angebote.');
+    const live = liveStatus(ctx);
+    if (!live.available) warnings.push(live.headline);
+    for (const p of live.providers) {
+      if (p.readiness.authorized && p.lastRun && (p.lastRun as { status: string }).status === 'failed') warnings.push(`${p.label}: letzte Abfrage fehlgeschlagen – ${(p.lastRun as { message: string | null }).message ?? ''}`);
+    }
     return {
       app: APP_NAME, version: APP_VERSION, now: nowIso(), sources, counts, warnings,
       analysis: run ?? null, importRunning: isImportRunning(),
@@ -77,8 +84,36 @@ export function registerRoutes(r: Router, ctx: AppContext, scheduler: Scheduler 
         telegram: !!(ctx.cfg.secrets.telegramBotToken && ctx.cfg.secrets.telegramChatId),
         discord: !!ctx.cfg.secrets.discordWebhookUrl, email: false,
       },
-      liveOfferProviders: ctx.providers.offers.map(p => p.id),
+      liveOfferProviders: live.providers.filter(p => p.healthy && p.kind === 'licensed_api').map(p => p.id),
+      live: { available: live.available, headline: live.headline, providers: live.providers.map(p => ({ id: p.id, label: p.label, kind: p.kind, healthy: p.healthy, ready: p.readiness.configured && p.readiness.authorized, reason: p.readiness.reason, lastSuccessAt: p.lastSuccessAt })) },
     };
+  });
+
+  // ------------------------------------------------------------------ Live-Deal-Radar
+  r.get('/api/live/status', () => liveStatus(ctx));
+  r.get('/api/live/targets', c => listTargets(db, c.query.get('provider'), Math.min(optNum(c.query, 'limit') ?? 300, 2000)));
+  r.get('/api/live/events', c => listEvents(db, Math.min(optNum(c.query, 'limit') ?? 100, 1000)));
+  r.get('/api/live/runs', c => db.all('SELECT * FROM live_poll_runs ORDER BY id DESC LIMIT ?', [Math.min(optNum(c.query, 'limit') ?? 50, 500)]));
+  r.post('/api/live/targets/refresh', c => {
+    const b = obj(c.body);
+    const ids = typeof b.provider === 'string' ? [b.provider] : ctx.providers.listings.map(p => p.id);
+    return { refreshed: ids.map(id => ({ provider: id, targets: refreshTargets(ctx, id, true) })) };
+  });
+  r.post('/api/live/poll', async c => {
+    const b = obj(c.body);
+    const list = ctx.providers.listings.filter(p => typeof b.provider !== 'string' || p.id === b.provider);
+    if (!list.length) throw new ApiError(404, 'Unbekannter Feed');
+    const results = [];
+    for (const p of list) results.push(await pollProvider(ctx, p, { onIngested: () => scheduler?.scheduleReanalysis() }));
+    return { results, status: liveStatus(ctx), radarRunning: radar?.running ?? false };
+  });
+
+  // ------------------------------------------------------------------ Qualitätsbericht (US-07)
+  r.get('/api/quality/latest', () => latestQualityReport(db) ?? buildQualityReport(ctx));
+  r.post('/api/quality/report', c => {
+    const b = obj(c.body);
+    const rep = buildQualityReport(ctx, { tests: b.tests && typeof b.tests === 'object' ? b.tests as never : null });
+    return saveQualityReport(db, rep);
   });
 
   r.get('/api/import-runs', c => db.all('SELECT * FROM import_runs ORDER BY id DESC LIMIT ?', [optNum(c.query, 'limit') ?? 50]));
@@ -114,16 +149,22 @@ export function registerRoutes(r: Router, ctx: AppContext, scheduler: Scheduler 
   r.get('/api/opportunities', c => queryOpportunities(db, parseOppQuery(c.query)));
   r.get('/api/opportunities.csv', c => {
     const res = queryOpportunities(db, { ...parseOppQuery(c.query), limit: 2000 });
-    const head = ['Karte', 'Edition', 'Set', 'Nr', 'Finish', 'Signaltyp', 'Strategie', 'Marktpreis (Trend)', 'Einkauf inkl. Porto', 'Verkauf konservativ',
-      'Verkauf Basis', 'Verkauf optimistisch', 'Gewinn Basis', 'ROI Basis %', 'Rabatt %', 'Risiko', 'Confidence', 'Score', 'Empfehlung', 'Regeln erfüllt',
-      'Zustand', 'Sprache', 'Verkäufer', 'Price-Guide-Stand', 'Beobachtet', 'Quelle', 'Angebotslink', 'Produktlink'];
-    const lines = res.items.map(o => [
-      csvStr(o.name), csvStr(o.setName), csvStr(o.setCode), csvStr(o.collectorNumber), o.finish, o.signalClass, csvStr(o.strategyLabel),
-      csvNum(o.marketPrice), csvNum(o.buy.effective), csvNum(o.resale.conservative), csvNum(o.resale.base), csvNum(o.resale.optimistic),
-      csvNum(o.scenarios.base?.profit), csvNum(o.scenarios.base?.roiPct), csvNum(o.discountPct), o.score.riskLevel, csvNum(o.score.confidence),
-      csvNum(o.score.score), o.recommendation, o.rules.passed ? 'ja' : 'nein', o.buy.condition ?? '', o.buy.language ?? '', csvStr(o.buy.seller),
-      o.dataDate ?? '', o.signalClass === 'MARKET_SIGNAL' ? '' : o.buy.observedAt, o.buy.source, o.buy.offerUrl ?? '', o.productUrl,
-    ].join(';'));
+    const head = ['Karte', 'Edition', 'Set', 'Nr', 'Finish', 'Signaltyp', 'Kennzeichnung', 'Strategie', 'Marktpreis (Trend)', 'Einkauf inkl. Porto (nur Angebote)',
+      'Modellwert (hypothetisch, nur Marktsignale)', 'Verkauf konservativ', 'Verkauf Basis', 'Verkauf optimistisch', 'Gewinn konservativ', 'Gewinn Basis', 'ROI Basis %',
+      'Rabatt %', 'Risiko', 'Confidence', 'Score', 'Empfehlung', 'Regeln erfüllt', 'Zustand', 'Sprache', 'Verkäufer', 'Angebots-ID', 'Price-Guide-Stand', 'Beobachtet',
+      'Quelle', 'Angebotslink', 'Produktlink'];
+    const lines = res.items.map(o => {
+      const model = o.signalClass === 'MARKET_SIGNAL';
+      return [
+        csvStr(o.name), csvStr(o.setName), csvStr(o.setCode), csvStr(o.collectorNumber), o.finish, o.signalClass, csvStr((o.labels ?? []).join(' · ')), csvStr(o.strategyLabel),
+        csvNum(o.marketPrice), model ? '' : csvNum(o.buy.effective), model ? csvNum(o.buy.price) : '',
+        csvNum(o.resale.conservative), csvNum(o.resale.base), csvNum(o.resale.optimistic),
+        model ? '' : csvNum(o.scenarios.conservative?.profit), model ? '' : csvNum(o.scenarios.base?.profit), model ? '' : csvNum(o.scenarios.base?.roiPct),
+        model ? '' : csvNum(o.discountPct), o.score.riskLevel, csvNum(o.score.confidence),
+        csvNum(o.score.score), o.recommendation, o.rules.passed ? 'ja' : 'nein', model ? '' : o.buy.condition ?? '', o.buy.language ?? '', csvStr(o.buy.seller),
+        csvStr(o.buy.externalId), o.dataDate ?? '', model ? '' : o.buy.observedAt, o.buy.source, o.buy.offerUrl ?? '', o.productUrl,
+      ].join(';');
+    });
     return new Raw('text/csv; charset=utf-8', '﻿' + [head.join(';'), ...lines].join('\r\n'), `mtgds-opportunities-${nowIso().slice(0, 10)}.csv`);
   });
   r.get('/api/opportunities/:key', c => {
@@ -303,6 +344,13 @@ export function registerRoutes(r: Router, ctx: AppContext, scheduler: Scheduler 
     const o = getOpportunity(db, b.opportunityKey);
     if (!o) throw new ApiError(404, 'Möglichkeit nicht in der aktuellen Rangliste – bitte neu laden');
     if (o.signalClass === 'SIMULATION' && b.decision === 'accepted') throw new ApiError(400, 'Simulierte Angebote können nicht gekauft werden');
+    if (o.signalClass === 'MARKET_SIGNAL' && b.decision === 'accepted') {
+      throw new ApiError(400, 'Ein Marktsignal ist kein Angebot und hat keinen Einkaufspreis. Erst das konkrete Angebot erfassen (Erweiterung, CSV oder Feed) und dieses kaufen.');
+    }
+    // Eine alte Beobachtung belegt nicht, dass das Angebot noch verfügbar ist: vor der Zahlung auf der Seite prüfen.
+    if (o.signalClass === 'LIVE_OFFER' && b.decision === 'accepted' && b.confirmedAvailable !== true) {
+      throw new ApiError(409, 'Bitte bestätigen, dass das Angebot unmittelbar vor der Zahlung auf der Angebotsseite geprüft wurde (Preis, Zustand, Sprache, Verfügbarkeit): confirmedAvailable = true.');
+    }
     return db.tx(() => {
       const id = recordDecision(db, { opportunity: o, decision: b.decision as 'accepted' | 'rejected', reason: typeof b.reason === 'string' ? b.reason : null });
       let purchaseOrderId: number | null = null;

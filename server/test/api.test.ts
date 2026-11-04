@@ -60,8 +60,8 @@ describe('REST-API', () => {
     const r = await call('POST', '/api/offers', {
       source: 'extension',
       offers: [
-        { externalId: 'articleRow9', productExternalId: 152, price: 55, condition: 'NM', language: 'en', seller: 'GoodSeller', sellerCountry: 'Deutschland', sellerType: 'pro', sellerSales: 5000, observedAt: new Date().toISOString() },
-        { externalId: 'articleRow10', productExternalId: 152, price: 85, condition: 'NM', language: 'en', seller: 'GoodSeller', sellerCountry: 'Deutschland' },
+        { externalId: 'articleRow9', productExternalId: 152, price: 55, condition: 'NM', language: 'en', seller: 'GoodSeller', sellerCountry: 'Deutschland', sellerType: 'pro', sellerSales: 5000, url: 'https://www.cardmarket.com/de/Magic/Products/Singles/Mirrodin/Chrome-Mox', observedAt: new Date().toISOString() },
+        { externalId: 'articleRow10', productExternalId: 152, price: 85, condition: 'NM', language: 'en', seller: 'GoodSeller', sellerCountry: 'Deutschland', url: 'https://www.cardmarket.com/de/Magic/Products/Singles/Mirrodin/Chrome-Mox' },
       ],
     }, auth());
     assert.equal(r.status, 200, r.text);
@@ -145,7 +145,9 @@ describe('REST-API', () => {
   it('Gesamtablauf: Empfehlung → Einkauf → Wareneingang → Auftrag → Versand → realisierter Deckungsbeitrag', async () => {
     const opp = await call('GET', '/api/opportunities?recommendation=KAUFEN');
     const key = (opp.json as unknown as { items: { key: string }[] }).items[0].key;
-    const d = await call('POST', '/api/decisions', { opportunityKey: key, decision: 'accepted' }, auth());
+    const unconfirmed = await call('POST', '/api/decisions', { opportunityKey: key, decision: 'accepted' }, auth());
+    assert.equal(unconfirmed.status, 409, 'Kauf ohne Prüfung des Angebots vor der Zahlung wird abgelehnt');
+    const d = await call('POST', '/api/decisions', { opportunityKey: key, decision: 'accepted', confirmedAvailable: true }, auth());
     assert.equal(d.status, 200, d.text);
     const poId = (d.json as unknown as { purchaseOrderId: number }).purchaseOrderId;
     const po = (await call('GET', `/api/purchases/${poId}`)).json as unknown as { status: string; lines: { id: number; unitPrice: number }[]; shippingCost: number };

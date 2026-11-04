@@ -15,7 +15,10 @@ app.server.on('error', (e: NodeJS.ErrnoException) => {
 app.server.listen(cfg.port, cfg.host, () => {
   log.info(`${APP_NAME} ${APP_VERSION} läuft: http://${cfg.host === '127.0.0.1' ? 'localhost' : cfg.host}:${cfg.port}`);
   log.info(`Datenbank: ${cfg.dbFile}`);
-  app.scheduler?.start();
+  if (app.scheduler) {
+    app.scheduler.start();
+    app.radar.start();
+  }
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

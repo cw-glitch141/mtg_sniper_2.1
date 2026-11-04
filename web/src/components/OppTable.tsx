@@ -1,6 +1,6 @@
 import type { Opportunity } from '../api';
 import { euro, pct, STRATEGY_LABEL } from '../format';
-import { Money, PriorityBadge, Rec, Score, SignalBadge } from '../ui';
+import { ExtraLabels, Money, PriorityBadge, Rec, Score, SignalBadge } from '../ui';
 
 export type SortKey = 'score' | 'profit' | 'roi' | 'confidence' | 'discount' | 'price' | 'name';
 
@@ -49,14 +49,16 @@ export function OppTable({ items, onOpen, sort, dir, onSort, compact }: Props) {
               </td>
               {!compact && <td className="small">{o.setName ?? '–'}{o.setCode ? <span className="muted"> ({o.setCode}{o.collectorNumber ? ' #' + o.collectorNumber : ''})</span> : null}</td>}
               <td className="num">{euro(o.marketPrice)}</td>
-              <td className="num" title={`${o.buy.label}\n${euro(o.buy.price)} + ${euro(o.buy.shipping)} Porto (${o.buy.shippingNote})`}>{euro(o.buy.effective)}</td>
+              {o.signalClass === 'MARKET_SIGNAL'
+                ? <td className="num muted" title="Marktsignal: kein Angebot, daher kein Einkaufspreis">–</td>
+                : <td className="num" title={`${o.buy.label}\n${euro(o.buy.price)} + ${euro(o.buy.shipping)} Porto (${o.buy.shippingNote})`}>{euro(o.buy.effective)}</td>}
               <td className="num" title={`konservativ ${euro(o.resale.conservative)} · optimistisch ${euro(o.resale.optimistic)}`}>{euro(o.resale.base)}</td>
-              <td className="num"><Money v={o.scenarios.base?.profit} signed /></td>
-              <td className="num">{pct(o.scenarios.base?.roiPct)}</td>
+              <td className="num">{o.signalClass === 'MARKET_SIGNAL' ? <span className="muted">–</span> : <Money v={o.scenarios.base?.profit} signed />}</td>
+              <td className="num">{o.signalClass === 'MARKET_SIGNAL' ? '–' : pct(o.scenarios.base?.roiPct)}</td>
               {!compact && <td className={`risk-${o.score.riskLevel}`}>{o.score.riskLevel}</td>}
               <td className="num">{Math.round(o.score.confidence)}</td>
               <td><Score v={o.score.score} title={o.score.capped ? 'gedeckelt wegen niedriger Confidence' : undefined} /></td>
-              <td><SignalBadge c={o.signalClass} /></td>
+              <td><SignalBadge c={o.signalClass} /> <ExtraLabels labels={o.labels} /></td>
               {!compact && <td><PriorityBadge p={o.priority} />{o.holdings && o.holdings.copies + o.holdings.onOrder > 0 && <div className="small muted">{o.holdings.copies} im Lager{o.holdings.onOrder ? ` +${o.holdings.onOrder} bestellt` : ''}</div>}</td>}
               {!compact && <td><Rec r={o.recommendation} /></td>}
             </tr>

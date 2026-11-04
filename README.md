@@ -1,4 +1,4 @@
-# MTG Deal Sniper 2.1 – Business Edition
+# MTG Deal Sniper 2.2 – Business Edition
 
 Lokale Plattform für den Handel mit Magic-Einzelkarten auf Cardmarket – vom Deal bis zur Gewinnauswertung:
 
@@ -10,6 +10,47 @@ und deinen eigenen Einkaufs-, Lager- und Verkaufsdaten. Ausgelegt auf zunächst 
 
 > Kein Versprechen auf Gewinn. Das System ist eine datenbasierte Entscheidungshilfe, deren Prognosen sich
 > in Profit Analytics an echten Verkäufen überprüfen lassen. Prognosen und reale Ergebnisse sind überall getrennt gekennzeichnet.
+
+## Live-Deal-Radar (2.2) – ehrlicher Status
+
+| Frage | Antwort (Stand 04.11.2026) |
+|---|---|
+| **Welche Quelle ist aktiv?** | **Keine Live-Quelle.** Die App meldet wörtlich: *„Automatische Cardmarket-Angebotsüberwachung nicht verfügbar – keine Live-Datenquelle verbunden“*. Cardmarket nimmt keine API-Anträge an; der Price Guide enthält keine Einzelangebote. Implementiert ist ein Adapter für die **CardTrader-API** (anderer Marktplatz, eigenes Token). Er ist **nicht verifiziert**, weil kein Token vorliegt. |
+| **Welche Karten werden überwacht?** | Sobald ein Feed bereit ist: eine dynamische Zielmenge (Standard bis 300 Varianten) aus Preisband, belegten Verkäufen (1-/7-Tages-Ø), Preisbewegung und Watchlist, ohne Ausreißer. Nur Varianten, die der Feed tatsächlich abdeckt, gelten als abgedeckt. Die Liste steht im Dashboard unter **Live-Radar**. **Keine Vollabdeckung des Cardmarket-Markts.** |
+| **Wie aktuell sind die Daten?** | Price Guide: einmal täglich. Feed: Abfrage alle 10 Minuten (einstellbar). Die tatsächliche Verzögerung wird gemessen und angezeigt (ohne Quell-Zeitstempel als Obergrenze). Es gibt keine ungemessene „Echtzeit“-Behauptung. |
+| **Was fehlt für den Vollbetrieb?** | Ein eigenes CardTrader-Konto und Token (`CARDTRADER_TOKEN` in `.env`), die selbst gelesenen und in den Einstellungen bestätigten CardTrader-API-Bedingungen und ein erster echter Lauf mit realen Angebots-IDs. Laut Recherche entstehen keine API-Kosten, bitte selbst prüfen. Für **Cardmarket**-Angebote fehlt eine Cardmarket-API-Zulassung, die derzeit nicht möglich ist. Details: [docs/datenquellen.md](docs/datenquellen.md). |
+
+Die **autonome Sniper-Funktion ist erst fertig, wenn ein Listing-Feed nachweislich angeschlossen ist** (siehe US-04 in
+[docs/user-stories.md](docs/user-stories.md)). Bis dahin stammen Kaufchancen nur aus Angeboten, die du mit der
+Browser-Erweiterung oder per CSV erfasst. Die Erweiterung bleibt ein optionaler manueller Zusatz.
+
+Was sich in 2.2 an der Darstellung geändert hat:
+
+- **Kaufchancen** (früher „Trading Opportunities“) zeigt nur belegte Einzelangebote. „KAUFEN“ erscheint nur bei einem
+  vollständigen (Verkäufer, Preis, Link, Zustand, Sprache), frischen und auch konservativ rentablen Angebot.
+  Fehlende Angaben führen zu „PRÜFEN“.
+- **Market Watch / Recherche** zeigt Price-Dip, Volatilität und Tiefstpreis nur noch als Referenzwerte und
+  Trendunterschiede, plus einen ausdrücklich **hypothetischen Modellwert**. Dort gibt es weder Einkaufspreis noch Gewinn
+  und keinen „Gekauft erfassen“-Button.
+- Kennzeichnung überall: **LIVE-ANGEBOT**, **MARKTSIGNAL**, **VERALTET**, **SIMULATION**/**TEST** sowie **SYSTEM** für
+  Betreiber-Meldungen.
+- Ein Kauf eines Angebots muss bestätigt werden: „unmittelbar vor der Zahlung auf der Angebotsseite geprüft“.
+  Eine alte Beobachtung belegt nicht, dass das Angebot noch verfügbar ist.
+- Täglicher **Qualitätsbericht** (`scripts/daily-quality.ps1`) und **Betreiber-Warnungen** bei Ausfall oder veralteten Daten.
+
+Test-Feed zum Ausprobieren (nur SIMULATION, nie extern versendet): `MTGDS_MOCK_FEED=1` in `.env`, danach im
+**Live-Radar** zweimal „Jetzt abfragen“. Die erste Abfrage legt die Grundlinie an, die zweite erzeugt TEST-Ereignisse.
+Nicht mit der echten Datenbank verwenden, wenn du keine Testangebote darin haben möchtest
+(`MTGDS_DATA_DIR` auf einen anderen Ordner setzen).
+
+## Update von 2.1 auf 2.2
+
+- Laufenden Server beenden und `start.cmd` starten. `start.cmd` baut das Dashboard jetzt bei jedem Start neu.
+- Migration 3 ist rein additiv: neue Spalten an `offers`, neue Tabellen für Feed-Läufe, Ereignisse, Zielmenge,
+  Zuordnung und Qualitätsberichte. Vorher wird automatisch gesichert (`data/backups/mtgds-before-migration-3-….sqlite`).
+  Getestet auf einer Kopie der echten Datenbank.
+- API-Änderung: `POST /api/decisions` mit `decision: "accepted"` verlangt für Live-Angebote `confirmedAvailable: true`
+  und lehnt Marktsignale ab.
 
 ## Update von 2.0 auf 2.1
 
@@ -58,8 +99,10 @@ Starten in: Projektordner. Jeder Tag ohne Import fehlt in der Historie – er wi
 
 | Signalklasse | Bedeutung | Kann „KAUFEN“ werden? |
 |---|---|---|
-| **MARKTSIGNAL** | Erkenntnis aus aggregierten bzw. historischen Preisdaten (Price Guide, eigene Snapshots). Kein konkretes Angebot bekannt. | Nein – höchstens **PRÜFEN** („Angebot suchen und prüfen“) |
-| **LIVE-ANGEBOT** | Tatsächlich beobachtetes Einzelangebot, mit Beobachtungszeitpunkt (Extension oder manueller Import). | Ja, wenn alle Kaufregeln erfüllt sind und das Angebot nicht veraltet ist |
+| **MARKTSIGNAL** | Erkenntnis aus aggregierten bzw. historischen Preisdaten (Price Guide, eigene Snapshots). Kein konkretes Angebot bekannt, daher kein Einkaufspreis und kein Gewinn – nur Referenzwerte und ein hypothetischer Modellwert (Market Watch). | Nein – höchstens **PRÜFEN** („Angebot suchen und prüfen“) |
+| **LIVE-ANGEBOT** | Tatsächlich beobachtetes Einzelangebot mit Beobachtungszeitpunkt (Extension, manueller Import oder autorisierter Feed). | Ja, wenn alle Kaufregeln erfüllt sind, alle Pflichtangaben vorliegen, das Angebot frisch ist (Feed: 60 Min., sonst 48 h) und das konservative Szenario die Mindestwerte erreicht |
+| **VERALTET** (Zusatz) | Angebot oder Price Guide älter als die Frische-Grenze. | Nein |
+| **SYSTEM** | Betreiber-Meldung (Import- oder Feed-Ausfall, veraltete Daten). | – (kein Handelssignal) |
 | **SIMULATION** | Testdaten ohne Kaufmöglichkeit. | Nie; wird nie an Telegram/Discord gesendet |
 
 Die Klasse steht in Tabelle, Detailansicht, Alarmen und CSV-Export.
@@ -76,6 +119,7 @@ Die Klasse steht in Tabelle, Detailansicht, Alarmen und CSV-Export.
   „Historie < 7 Tage“ bzw. „mindestens 14 Tage nötig“. Am ersten Tag nutzt der Price-Dip-Scanner die
   Cardmarket-Aggregate (1-Tages-Ø vs. 30-Tages-Ø) und kennzeichnet das.
 - Ohne Live-Angebote gibt es keine Kaufempfehlungen, nur Marktsignale zum Prüfen.
+- Ohne autorisierten Listing-Feed entstehen keine automatischen Angebote (siehe „Live-Deal-Radar“ oben).
 
 ---
 
@@ -391,7 +435,8 @@ Business: `GET /api/portfolio` (+ `/history`) · `/api/ledger` · `/api/purchase
 
 | Schnittstelle | Zustand | Anschlusspunkt |
 |---|---|---|
-| Cardmarket-Live-Angebote (offizielle API) | nicht verbunden (keine Zulassung) | `OfferProvider` in `server/src/providers/types.ts` |
+| Cardmarket-Live-Angebote (offizielle API) | nicht verbunden (Cardmarket nimmt keine API-Anträge an) | `ListingProvider` in `server/src/providers/listings.ts` |
+| CardTrader-Live-Angebote (offizielle API, eigenes Token) | Adapter implementiert, **nicht verifiziert** | `server/src/providers/cardtrader.ts`, Radar in `server/src/services/liveRadar.ts` |
 | Cardmarket-Bestellungen importieren | manuell / Standard-CSV | `createOrder()` in `server/src/services/sales.ts` – ein zugelassener Provider kann Aufträge direkt anlegen (Dubletten-Schutz greift) |
 | Cardmarket-Bestand / Preise setzen | Vorschläge + CSV-Arbeitsliste | `applyPrice()` in `server/src/services/repricing.ts`, Lagerdaten in `stock_lots` |
 | Weitere Marktplätze (eBay, TCGplayer …) | Plattform-Felder vorhanden | `platform` an `purchase_orders`, `stock_lots.list_platform`, `sales_orders` |

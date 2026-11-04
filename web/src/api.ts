@@ -66,13 +66,49 @@ export interface Status {
   scheduler: { running: boolean; lastTickAt: string | null; lastError: string | null } | null;
   channels: { telegram: boolean; discord: boolean; email: boolean };
   liveOfferProviders: string[];
+  live?: { available: boolean; headline: string; providers: { id: string; label: string; kind: string; healthy: boolean; ready: boolean; reason: string | null; lastSuccessAt: string | null }[] };
+}
+
+export interface LiveProvider {
+  id: string; label: string; kind: 'licensed_api' | 'test'; signalClass: 'LIVE_OFFER' | 'SIMULATION'; limits: string; coverage: string;
+  readiness: { configured: boolean; authorized: boolean; reason: string | null };
+  lastRun: { status: string; started_at: string; finished_at: string | null; message: string | null; requests: number; covered: number; targets: number; rate_limited: number } | null;
+  lastSuccessAt: string | null; healthy: boolean; runs24h: number; failed24h: number; rateLimited24h: number; requests24h: number;
+  targets: { total: number; polled: number; unsupported: number; withListings: number };
+}
+export interface LiveStatus {
+  available: boolean; headline: string; notAvailableMessage: string; monitorsCardmarket: boolean; providers: LiveProvider[];
+  events24h: { newListings: number; priceDrops: number; alerts: number; testEvents: number };
+  latency7d: { samples: number; medianMs: number | null; p90Ms: number | null; exactSamples: number; note: string };
+  falseAlarm30d: { alerted: number; rejectedAfterAlert: number; ratePct: number | null };
+  settings: { pollIntervalMinutes: number; maxTargets: number; maxListingAgeMinutes: number };
+}
+export interface LiveEvent {
+  id: number; type: 'new_listing' | 'price_drop' | 'price_increase'; signalClass: 'LIVE_OFFER' | 'SIMULATION'; source: string; oldPrice: number | null; newPrice: number;
+  detectedAt: string; latencyMs: number | null; latencyBasis: string | null; alertId: number | null; offerId: number; productId: number | null; name: string | null;
+  setName: string | null; finish: string; condition: string | null; language: string | null; seller: string | null; sellerCountry: string | null; url: string | null; observedAt: string; listingId: string;
+}
+export interface LiveTarget {
+  provider: string; productId: number; finish: string; priority: number; reasons: string[]; firstPolledAt: string | null; lastPolledAt: string | null;
+  lastOkAt: string | null; lastListings: number | null; unsupported: string | null; name: string; setName: string | null; setCode: string | null;
+}
+export interface QualityFinding { code: string; severity: 'critical' | 'warning' | 'info'; area: string; text: string; suggestion: string }
+export interface QualityReportData {
+  id?: number; createdAt: string; status: 'ok' | 'warning' | 'critical'; findings: QualityFinding[];
+  freshness: { source: string; label: string; dataCreatedAt: string | null; ageHours: number | null; stale: boolean; failing: boolean }[];
+  tests: { total: number; passed: number; failed: number; typecheck: string; at: string } | null;
 }
 export interface OppList { runId: number | null; total: number; items: Opportunity[] }
 export interface Mover { productId: number; name: string; setName: string | null; imageUrl: string | null; finish: string; fromPrice: number; toPrice: number; changePct: number; fromDate: string | null; toDate: string; basis: string }
 export interface Movers { basis: string; note: string; items: Mover[] }
 export interface AlertItem {
-  id: number; kind: string; signalClass: 'MARKET_SIGNAL' | 'LIVE_OFFER' | 'SIMULATION'; signalLabel: string; priority: Priority | null; priorityLabel: string | null; title: string; message: string;
-  payload: { name?: string; setName?: string | null; condition?: string | null; buyPrice?: number | null; sellEstimate?: number | null; profit?: number | null; roiPct?: number | null; confidence?: number | null; dataDate?: string | null; observedAt?: string | null; source?: string | null; url?: string | null; productUrl?: string | null; opportunityKey?: string };
+  id: number; kind: string; signalClass: 'MARKET_SIGNAL' | 'LIVE_OFFER' | 'SIMULATION' | 'SYSTEM'; signalLabel: string; priority: Priority | null; priorityLabel: string | null; title: string; message: string;
+  payload: {
+    name?: string; setName?: string | null; condition?: string | null; language?: string | null; buyPrice?: number | null; offerPrice?: number | null; shipping?: number | null;
+    sellEstimate?: number | null; profit?: number | null; profitConservative?: number | null; roiPct?: number | null; confidence?: number | null;
+    referencePrice?: number | null; marketPrice?: number | null; modelValue?: number | null; reportedLow?: number | null; seller?: string | null; listingId?: string | null; labels?: string[];
+    dataDate?: string | null; observedAt?: string | null; source?: string | null; url?: string | null; productUrl?: string | null; opportunityKey?: string;
+  };
   createdAt: string; readAt: string | null; deliveries: Record<string, string>;
 }
 export interface WatchEntry { id: number; listName: string; nameKey: string; name: string; productId: number | null; finish: string | null; qty: number; targetPrice: number | null; bought: boolean; url: string | null; notes: string | null; origin: string; addedAt: string; minCondition: string | null; languages: string[] | null }

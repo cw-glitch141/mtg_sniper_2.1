@@ -1,6 +1,6 @@
 /**
  * Voneinander unabhängige Erkennungsstrategien für Marktsignale.
- * Jede Strategie liefert eine Einkaufsbasis + Begründung, wenn sie anschlägt.
+ * Jede Strategie liefert eine hypothetische Modellbasis + Begründung, wenn sie anschlägt (kein Einkaufspreis!).
  * (Strategie 1 – Einzelangebote – steckt in services/offers.ts, weil sie beobachtete Angebote braucht.
  *  Strategie 5 – Bündelung – in services/bundles.ts; Strategie 6 – Ranking – in services/analysis.ts.)
  */
@@ -13,9 +13,14 @@ import { guideMetrics, historyMetrics } from './stats.ts';
 
 export interface StrategyHit { strategy: Strategy; buy: BuyBasis; triggers: string[]; confidenceDelta?: number; confidenceNote?: string }
 
+/**
+ * Modellbasis eines Marktsignals. Das ist KEIN Einkaufspreis: zu diesem Wert ist kein Angebot belegt.
+ * Er dient nur dazu, Marktsignale untereinander zu ranken, und wird als "Modellwert (hypothetisch)" angezeigt.
+ */
 function marketBasis(price: number, label: string, g: GuidePrices, condition: string | null): BuyBasis {
   return {
-    price, shipping: null, label, observedAt: g.sourceCreatedAt, source: 'cardmarket_price_guide',
+    price, shipping: null, hypothetical: true, externalId: null, reviewReasons: [],
+    label: `Modellwert (hypothetisch): ${label}`, observedAt: g.sourceCreatedAt, source: 'cardmarket_price_guide',
     condition, language: null, offerId: null, offerUrl: null, seller: null, sellerCountry: null,
     sellerType: null, sellerSales: null, amount: null, previousPrice: null,
   };
@@ -42,7 +47,7 @@ export function priceDip(g: GuidePrices, series: SnapshotPoint[], s: AppSettings
   const price = g.avg1 ?? g.trend;
   if (price == null) return null;
   const avg7Confirms = gm.avg7VsAvg30Pct != null && gm.avg7VsAvg30Pct <= th / 3;
-  const hit: StrategyHit = { strategy: 'price_dip', buy: marketBasis(price, g.avg1 != null ? '1-Tages-Ø (Marktsignal)' : 'Trendpreis (Marktsignal)', g, CONDITION_MIX), triggers };
+  const hit: StrategyHit = { strategy: 'price_dip', buy: marketBasis(price, g.avg1 != null ? '1-Tages-Ø' : 'Trendpreis', g, CONDITION_MIX), triggers };
   if (!historyConfirms && !avg7Confirms) {
     hit.confidenceDelta = -10;
     hit.confidenceNote = 'Rückgang nur im 1-Tages-Ø (evtl. Einzelverkauf), nicht durch 7-Tages-Ø oder Historie bestätigt';
@@ -63,7 +68,7 @@ export function volatilityScan(g: GuidePrices, series: SnapshotPoint[], s: AppSe
   if (hm.vol30.value < 3 || r.percentile > 25 || upside < s.rules.minDiscountPct) return null;
   return {
     strategy: 'volatility',
-    buy: marketBasis(g.trend, 'Trendpreis im unteren Bereich der Schwankung (Marktsignal)', g, CONDITION_MIX),
+    buy: marketBasis(g.trend, 'Trendpreis im unteren Bereich der Schwankung', g, CONDITION_MIX),
     triggers: [
       `Tagesvolatilität ${hm.vol30.value} % über ${hm.vol30.n} Tage.`,
       `Aktueller Trend im unteren ${Math.round(r.percentile)} %-Bereich der 30-Tage-Spanne (${r.min.toFixed(2)}–${r.max.toFixed(2)} €), Median ${round1(upside)} % darüber.`,
@@ -82,7 +87,7 @@ export function spreadLow(g: GuidePrices, s: AppSettings): StrategyHit | null {
   if (gm.lowVsTrendPct == null || gm.lowVsTrendPct > -s.rules.minDiscountPct) return null;
   return {
     strategy: 'spread_low',
-    buy: marketBasis(g.low, 'gemeldeter Tiefstpreis (Marktsignal, Zustand/Sprache unbekannt)', g, null),
+    buy: marketBasis(g.low, 'gemeldeter Price-Guide-Tiefstpreis (Zustand/Sprache/Verfügbarkeit unbekannt)', g, null),
     triggers: [`Gemeldeter Tiefstpreis ${round1(gm.lowVsTrendPct)} % unter Trend zum Zeitpunkt der Price-Guide-Erstellung.`],
   };
 }

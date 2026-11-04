@@ -503,4 +503,102 @@ ALTER TABLE watchlist ADD COLUMN languages TEXT;
 `,
     up: migrateLegacyInventory,
   },
+  {
+    id: 3,
+    name: '2.2 live-deal-radar: listing feeds, offer events, poll runs, quality reports',
+    // Nur additive Änderungen: bestehende Tabellen und Nutzerdaten bleiben unverändert.
+    sql: `
+ALTER TABLE offers ADD COLUMN currency TEXT;
+ALTER TABLE offers ADD COLUMN shipping REAL;
+ALTER TABLE offers ADD COLUMN source_timestamp TEXT;
+ALTER TABLE offers ADD COLUMN fetched_at TEXT;
+ALTER TABLE offers ADD COLUMN expires_at TEXT;
+ALTER TABLE offers ADD COLUMN source_authorized INTEGER;
+ALTER TABLE offers ADD COLUMN review_status TEXT;
+ALTER TABLE offers ADD COLUMN review_reasons TEXT;
+
+-- Neue oder preisreduzierte Angebote, die ein Listing-Feed erkannt hat
+CREATE TABLE offer_events (
+  id            INTEGER PRIMARY KEY,
+  offer_id      INTEGER NOT NULL REFERENCES offers(id),
+  source        TEXT NOT NULL,
+  signal_class  TEXT NOT NULL,
+  event_type    TEXT NOT NULL CHECK (event_type IN ('new_listing', 'price_drop', 'price_increase')),
+  old_price     REAL,
+  new_price     REAL NOT NULL,
+  detected_at   TEXT NOT NULL,
+  latency_ms    INTEGER,
+  latency_basis TEXT,
+  alert_id      INTEGER,
+  run_id        INTEGER
+);
+CREATE INDEX offer_events_detected ON offer_events (detected_at);
+
+-- Jede Abfrage eines Listing-Feeds (Health, Rate-Limits, Abdeckung, Fehler)
+CREATE TABLE live_poll_runs (
+  id            INTEGER PRIMARY KEY,
+  provider      TEXT NOT NULL,
+  started_at    TEXT NOT NULL,
+  finished_at   TEXT,
+  status        TEXT NOT NULL CHECK (status IN ('running', 'success', 'partial', 'failed', 'not_ready')),
+  targets       INTEGER NOT NULL DEFAULT 0,
+  covered       INTEGER NOT NULL DEFAULT 0,
+  unsupported   INTEGER NOT NULL DEFAULT 0,
+  requests      INTEGER NOT NULL DEFAULT 0,
+  listings      INTEGER NOT NULL DEFAULT 0,
+  accepted      INTEGER NOT NULL DEFAULT 0,
+  review        INTEGER NOT NULL DEFAULT 0,
+  rejected      INTEGER NOT NULL DEFAULT 0,
+  new_listings  INTEGER NOT NULL DEFAULT 0,
+  price_drops   INTEGER NOT NULL DEFAULT 0,
+  alerts        INTEGER NOT NULL DEFAULT 0,
+  rate_limited  INTEGER NOT NULL DEFAULT 0,
+  duration_ms   INTEGER,
+  message       TEXT
+);
+CREATE INDEX live_poll_runs_provider ON live_poll_runs (provider, started_at);
+
+-- Überwachte Varianten je Feed; first_polled_at = Grundlinie (erste Abfrage erzeugt keine Alarme)
+CREATE TABLE listing_targets (
+  provider        TEXT NOT NULL,
+  product_id      INTEGER NOT NULL REFERENCES products(id),
+  finish          TEXT NOT NULL,
+  priority        REAL NOT NULL DEFAULT 0,
+  reasons         TEXT,
+  selected_at     TEXT NOT NULL,
+  first_polled_at TEXT,
+  last_polled_at  TEXT,
+  last_ok_at      TEXT,
+  last_listings   INTEGER,
+  unsupported     TEXT,
+  PRIMARY KEY (provider, product_id, finish)
+);
+
+-- Zuordnung Anbieter-Produkt (z. B. CardTrader-Blueprint) → Cardmarket-idProduct
+CREATE TABLE provider_product_map (
+  provider            TEXT NOT NULL,
+  product_external_id INTEGER NOT NULL,
+  provider_product_id TEXT NOT NULL,
+  provider_group_id   TEXT,
+  updated_at          TEXT NOT NULL,
+  PRIMARY KEY (provider, product_external_id, provider_product_id)
+);
+CREATE TABLE provider_group_sync (
+  provider   TEXT NOT NULL,
+  group_id   TEXT NOT NULL,
+  synced_at  TEXT NOT NULL,
+  items      INTEGER NOT NULL,
+  PRIMARY KEY (provider, group_id)
+);
+
+-- Täglicher Qualitätsbericht (für Trends)
+CREATE TABLE quality_reports (
+  id         INTEGER PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  status     TEXT NOT NULL,
+  summary    TEXT NOT NULL,
+  report     TEXT NOT NULL
+);
+`,
+  },
 ];

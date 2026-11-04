@@ -10,6 +10,7 @@ import { Calculator } from './pages/Calculator';
 import { Settings } from './pages/Settings';
 import { DataSources } from './pages/DataSources';
 import { MarketWatch } from './pages/MarketWatch';
+import { LiveRadar } from './pages/LiveRadar';
 import { Purchases } from './pages/Purchases';
 import { Inventory } from './pages/Inventory';
 import { Orders } from './pages/Orders';
@@ -19,8 +20,9 @@ import { Capital } from './pages/Capital';
 
 const PAGES = [
   { id: 'overview', label: 'Übersicht', el: Overview, group: 'Markt' },
-  { id: 'scanner', label: 'Trading Opportunities', el: Scanner },
-  { id: 'market', label: 'Market Watch', el: MarketWatch },
+  { id: 'scanner', label: 'Kaufchancen (Angebote)', el: Scanner },
+  { id: 'live', label: 'Live-Radar', el: LiveRadar },
+  { id: 'market', label: 'Market Watch / Recherche', el: MarketWatch },
   { id: 'offers', label: 'Angebote & Bündel', el: Offers },
   { id: 'watchlist', label: 'Watchlist', el: Watchlist },
   { id: 'alerts', label: 'Alarme', el: Alerts },
@@ -107,7 +109,7 @@ export function App() {
     <ShellCtx.Provider value={shell}>
       <div className="app">
         <nav className="sidebar" aria-label="Hauptnavigation">
-          <div className="brand">MTG Deal Sniper 2.1<small>Business Edition</small></div>
+          <div className="brand">MTG Deal Sniper 2.2<small>Business Edition</small></div>
           <div className="nav">
             {PAGES.map(p => (
               <Fragment key={p.id}>
@@ -124,6 +126,7 @@ export function App() {
               <>
                 <div><span className={`dot ${guide?.failing ? 'fail' : guide?.stale ? 'stale' : 'ok'}`} style={{ display: 'inline-block', marginRight: 6 }} />Price Guide {guide?.dataCreatedAt ? new Date(guide.dataCreatedAt).toLocaleDateString('de-DE') : 'fehlt'}</div>
                 <div>Historie: {status.counts.historyDays} Tag(e)</div>
+                <div title={status.live?.headline}><span className={`dot ${status.live?.available ? 'ok' : 'fail'}`} style={{ display: 'inline-block', marginRight: 6 }} />Live-Feed: {status.live?.available ? 'verbunden' : 'keiner'}</div>
                 <div>v{status.version}</div>
               </>
             ) : <div className="neg">Server nicht erreichbar</div>}

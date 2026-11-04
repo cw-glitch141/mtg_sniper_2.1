@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { api, type Opportunity, type ProductDetail, type TradeResult } from '../api';
 import { age, dateTime, euro, LANG_LABEL, num, pct, STRATEGY_LABEL } from '../format';
-import { ErrorNotice, Money, NumInput, PriorityBadge, Rec, Score, SignalBadge, useAsync, useToast } from '../ui';
+import { ErrorNotice, ExtraLabels, Money, NumInput, PriorityBadge, Rec, Score, SignalBadge, useAsync, useToast } from '../ui';
 import { PriceChart } from './PriceChart';
 
 const COMPONENT_LABEL: Record<string, string> = {
@@ -53,10 +53,13 @@ function OpportunityView({ o, onDecided }: { o: Opportunity; onDecided: () => vo
   const [shipping, setShipping] = useState<number | null>(o.buy.shipping);
   const [reason, setReason] = useState('');
   const [poStatus, setPoStatus] = useState<'planned' | 'ordered' | 'paid'>('ordered');
+  const [confirmed, setConfirmed] = useState(false);
+  const [showModel, setShowModel] = useState(false);
+  const isMarket = o.signalClass === 'MARKET_SIGNAL';
   const submit = async (decision: 'accepted' | 'rejected') => {
     try {
       const body = decision === 'accepted'
-        ? { opportunityKey: o.key, decision, purchase: { qty: qty ?? 1, unitPrice: buyPrice ?? o.buy.price, shippingCost: shipping ?? 0, status: poStatus } }
+        ? { opportunityKey: o.key, decision, confirmedAvailable: confirmed, purchase: { qty: qty ?? 1, unitPrice: buyPrice ?? o.buy.price, shippingCost: shipping ?? 0, status: poStatus } }
         : { opportunityKey: o.key, decision, reason: reason || null };
       const r = await api.post<{ purchaseOrderId: number | null }>('/api/decisions', body);
       toast(decision === 'accepted' ? `Einkauf #${r.purchaseOrderId} angelegt – Wareneingang im Purchase Manager buchen.` : 'Ablehnung protokolliert.');
@@ -68,6 +71,7 @@ function OpportunityView({ o, onDecided }: { o: Opportunity; onDecided: () => vo
     <div className="card section">
       <div className="row" style={{ marginBottom: 10 }}>
         <SignalBadge c={o.signalClass} />
+        <ExtraLabels labels={o.labels} />
         <PriorityBadge p={o.priority} />
         <strong>{STRATEGY_LABEL[o.strategy]}</strong>
         {o.holdings && o.holdings.copies + o.holdings.onOrder > 0 && <span className="small muted">Bestand: {o.holdings.copies} im Lager, {o.holdings.onOrder} bestellt</span>}
@@ -77,15 +81,32 @@ function OpportunityView({ o, onDecided }: { o: Opportunity; onDecided: () => vo
       </div>
       {o.signalClass === 'MARKET_SIGNAL' && <div className="notice info">Marktsignal aus dem Cardmarket Price Guide (Stand {dateTime(o.dataDate)}). Es ist <strong>kein konkretes Angebot</strong> bekannt – bitte vor einem Kauf auf Cardmarket ein passendes Angebot suchen und prüfen.</div>}
       {o.signalClass === 'SIMULATION' && <div className="notice warn">SIMULATION – Testdaten ohne Kaufmöglichkeit.</div>}
+      {o.stale && <div className="notice error">VERALTET: {o.staleReason}. Vor einer Entscheidung neu prüfen.</div>}
+      {!isMarket && o.listingCheck && (o.listingCheck.missing.length > 0 || o.listingCheck.review.length > 0) && (
+        <div className="notice warn">
+          {o.listingCheck.missing.length > 0 && <div>Pflichtangaben fehlen: {o.listingCheck.missing.join(', ')} – daher nur Prüfung, keine Kaufchance.</div>}
+          {o.listingCheck.review.length > 0 && <div>Vor Kauf prüfen: {o.listingCheck.review.join(', ')}</div>}
+        </div>
+      )}
       <div className="grid cols-2">
-        <dl className="kv">
-          <dt>Einkaufsbasis</dt><dd>{o.buy.label}</dd>
-          <dt>Preis</dt><dd>{euro(o.buy.price)} + {euro(o.buy.shipping)} Porto <span className="muted small">({o.buy.shippingNote})</span></dd>
-          <dt>Effektiv</dt><dd><strong>{euro(o.buy.effective)}</strong>{o.buy.previousPrice != null && <span className="muted small"> (vorher {euro(o.buy.previousPrice)})</span>}</dd>
-          {o.buy.condition && <><dt>Zustand / Sprache</dt><dd>{o.buy.condition === 'MIX' ? 'Zustandsmix (Aggregat)' : o.buy.condition}{o.buy.language ? ' · ' + (LANG_LABEL[o.buy.language] ?? o.buy.language) : ''}</dd></>}
-          {o.buy.seller && <><dt>Verkäufer</dt><dd>{o.buy.seller}{o.buy.sellerCountry ? ` (${o.buy.sellerCountry})` : ''}{o.buy.sellerSales != null ? ` · ${o.buy.sellerSales} Verkäufe` : ''}</dd></>}
-          <dt>{o.signalClass === 'MARKET_SIGNAL' ? 'Datenstand' : 'Beobachtet'}</dt><dd>{dateTime(o.buy.observedAt)} <span className="muted small">({age(o.buy.observedAt)}, Quelle {o.buy.source})</span></dd>
-        </dl>
+        {isMarket ? (
+          <dl className="kv">
+            <dt>Trend</dt><dd>{euro(o.guide?.trend)}</dd>
+            <dt>Ø 1 / 7 / 30 Tage</dt><dd>{euro(o.guide?.avg1)} / {euro(o.guide?.avg7)} / {euro(o.guide?.avg30)}</dd>
+            <dt>Tiefstpreis (gemeldet)</dt><dd>{euro(o.guide?.low)} <span className="muted small">(Zustand, Sprache, Verfügbarkeit unbekannt)</span></dd>
+            <dt>Modellwert</dt><dd>{euro(o.buy.price)} <span className="muted small">hypothetisch – {o.buy.label.replace(/^Modellwert \(hypothetisch\):\s*/, '')}</span></dd>
+            <dt>Datenstand</dt><dd>{dateTime(o.buy.observedAt)} <span className="muted small">({age(o.buy.observedAt)}, Quelle {o.buy.source})</span></dd>
+          </dl>
+        ) : (
+          <dl className="kv">
+            <dt>Angebot</dt><dd>{o.buy.label}{o.buy.externalId ? <span className="muted small"> · Angebots-ID {o.buy.externalId}</span> : null}</dd>
+            <dt>Preis</dt><dd>{euro(o.buy.price)} + {euro(o.buy.shipping)} Porto <span className="muted small">({o.buy.shippingNote})</span></dd>
+            <dt>Effektiv</dt><dd><strong>{euro(o.buy.effective)}</strong>{o.buy.previousPrice != null && <span className="muted small"> (vorher {euro(o.buy.previousPrice)})</span>}</dd>
+            {o.buy.condition && <><dt>Zustand / Sprache</dt><dd>{o.buy.condition === 'MIX' ? 'Zustandsmix (Aggregat)' : o.buy.condition}{o.buy.language ? ' · ' + (LANG_LABEL[o.buy.language] ?? o.buy.language) : ''}</dd></>}
+            {o.buy.seller && <><dt>Verkäufer</dt><dd>{o.buy.seller}{o.buy.sellerCountry ? ` (${o.buy.sellerCountry})` : ''}{o.buy.sellerSales != null ? ` · ${o.buy.sellerSales} Verkäufe` : ''}</dd></>}
+            <dt>Beobachtet</dt><dd>{dateTime(o.buy.observedAt)} <span className="muted small">({age(o.buy.observedAt)}, Quelle {o.buy.source})</span></dd>
+          </dl>
+        )}
         <dl className="kv">
           <dt>Referenz (Median)</dt><dd>{euro(o.referencePrice)}</dd>
           <dt>Rabatt</dt><dd>{pct(o.discountPct)}</dd>
@@ -95,7 +116,12 @@ function OpportunityView({ o, onDecided }: { o: Opportunity; onDecided: () => vo
           <dt>Faktoren</dt><dd className="small">Zustand {o.resale.conditionFactor} · Sprache {o.resale.languageFactor}</dd>
         </dl>
       </div>
-      <div className="section"><h3>Kalkulation</h3><ScenarioTable o={o} /></div>
+      {isMarket ? (
+        <div className="section">
+          <button className="btn link small" onClick={() => setShowModel(v => !v)}>{showModel ? 'Hypothetische Rechnung ausblenden' : 'Hypothetische Rechnung anzeigen (kein Angebot, kein belegter Gewinn)'}</button>
+          {showModel && <><div className="notice info" style={{ margin: '8px 0' }}>Rechnung unter der Annahme, man könnte zum Modellwert kaufen. Dazu ist kein Angebot belegt – die Zahlen sind keine Kauf- oder Gewinnaussage.</div><ScenarioTable o={o} /></>}
+        </div>
+      ) : <div className="section"><h3>Kalkulation</h3><ScenarioTable o={o} /></div>}
       <div className="grid cols-2 section">
         <div>
           <h3 style={{ marginBottom: 8 }}>Kaufregeln {o.rules.smallProfitMode && <span className="badge LIVE_OFFER">Small-Profit</span>}</h3>
@@ -115,7 +141,7 @@ function OpportunityView({ o, onDecided }: { o: Opportunity; onDecided: () => vo
         {o.buy.offerUrl && <a className="btn" href={o.buy.offerUrl} target="_blank" rel="noopener noreferrer">Erfasstes Angebot öffnen ↗</a>}
         <a className="btn" href={o.productUrl} target="_blank" rel="noopener noreferrer">Produktseite auf Cardmarket ↗</a>
         <span className="spacer" />
-        {o.signalClass !== 'SIMULATION' && <button className="btn good" onClick={() => setMode(m => (m === 'buy' ? 'none' : 'buy'))}>Gekauft erfassen</button>}
+        {o.signalClass === 'LIVE_OFFER' && <button className="btn good" onClick={() => setMode(m => (m === 'buy' ? 'none' : 'buy'))}>Gekauft erfassen</button>}
         <button className="btn danger" onClick={() => setMode(m => (m === 'reject' ? 'none' : 'reject'))}>Ablehnen</button>
       </div>
       {mode === 'buy' && (
@@ -125,8 +151,12 @@ function OpportunityView({ o, onDecided }: { o: Opportunity; onDecided: () => vo
             <label className="field">Tatsächlicher Preis je Stück (€)<NumInput value={buyPrice} onChange={setBuyPrice} /></label>
             <label className="field">Porto gesamt (€)<NumInput value={shipping} onChange={setShipping} /></label>
             <label className="field">Status<select value={poStatus} onChange={e => setPoStatus(e.target.value as 'ordered')}><option value="planned">Geplant (Kapital reservieren)</option><option value="ordered">Bestellt</option><option value="paid">Bestellt und bezahlt</option></select></label>
-            <button className="btn good" style={{ alignSelf: 'flex-end' }} onClick={() => submit('accepted')}>Einkauf anlegen</button>
+            <button className="btn good" style={{ alignSelf: 'flex-end' }} disabled={!confirmed} onClick={() => submit('accepted')}>Einkauf anlegen</button>
           </div>
+          <label className="check" style={{ marginTop: 8 }}>
+            <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+            Ich habe das Angebot unmittelbar vor der Zahlung auf der Angebotsseite geprüft (Preis, Zustand, Sprache, noch verfügbar). Eine alte Beobachtung belegt das nicht.
+          </label>
           <div className="small muted" style={{ marginTop: 6 }}>Legt einen Einkauf im Purchase Manager an. Die Empfehlung (Score, erwarteter Gewinn) wird mitprotokolliert, damit später Prognose und Ergebnis verglichen werden können.</div>
         </div>
       )}

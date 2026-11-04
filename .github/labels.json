@@ -1,0 +1,11 @@
+[
+  { "name": "bug", "color": "d73a4a", "description": "Fehler" },
+  { "name": "data-quality", "color": "fbca04", "description": "Datenfrische, Vollständigkeit, Plausibilität" },
+  { "name": "api", "color": "1d76db", "description": "Externe Schnittstellen / Adapter" },
+  { "name": "live-listings", "color": "0e8a16", "description": "Angebotsgenaue Feeds und Live-Radar" },
+  { "name": "profit", "color": "5319e7", "description": "Kosten-, Gewinn- und ROI-Berechnung" },
+  { "name": "regression", "color": "b60205", "description": "Bestehende Funktion beschädigt / Rückwärtskompatibilität" },
+  { "name": "security", "color": "ee0701", "description": "Secrets, Zugriffsschutz, Datenschutz" },
+  { "name": "usability", "color": "c5def5", "description": "Bedienung und Darstellung" },
+  { "name": "blocked-by-provider", "color": "000000", "description": "Wartet auf Zugang/Freigabe eines Datenanbieters" }
+]

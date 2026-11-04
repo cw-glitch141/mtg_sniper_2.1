@@ -133,6 +133,8 @@ const BASE_CONFIDENCE: Record<Strategy, number> = {
 function confidence(i: ScoreInput, s: AppSettings): { value: number; notes: string[] } {
   const notes: string[] = [];
   let c = BASE_CONFIDENCE[i.strategy];
+  // Getrennte Bedeutung: Bei Marktsignalen bewertet die Confidence nur die Datenlage der Statistik, nicht ein Angebot.
+  if (i.signalClass === 'MARKET_SIGNAL') notes.push('Confidence eines Marktmodells (Datenlage der Statistik) – kein Angebot belegt');
   if (i.strategy === 'spread_low') notes.push('Tiefstpreis aus dem Price Guide: Zustand, Sprache und Verfügbarkeit unbekannt');
   if (i.guide.refsAvailable === 0) return { value: 0, notes: ['keine Referenzpreise'] };
   if (i.guide.refRatio != null && i.guide.refRatio > s.analysis.maxReferenceRatio) {

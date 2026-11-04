@@ -1,14 +1,23 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
-export const SIGNAL_LABEL = { MARKET_SIGNAL: 'MARKTSIGNAL', LIVE_OFFER: 'LIVE-ANGEBOT', SIMULATION: 'SIMULATION' } as const;
+export const SIGNAL_LABEL = { MARKET_SIGNAL: 'MARKTSIGNAL', LIVE_OFFER: 'LIVE-ANGEBOT', SIMULATION: 'SIMULATION', SYSTEM: 'SYSTEM' } as const;
 const SIGNAL_TITLE = {
   MARKET_SIGNAL: 'Aus aggregierten/historischen Cardmarket-Preisdaten. Kein kaufbares Angebot.',
   LIVE_OFFER: 'Tatsächlich beobachtetes Einzelangebot (Zeitpunkt der Beobachtung beachten).',
   SIMULATION: 'Testdaten – keine Kaufmöglichkeit.',
+  SYSTEM: 'Betreiber-Meldung (Datenausfall, Feed-Fehler) – kein Handelssignal.',
 } as const;
 
 export function SignalBadge({ c }: { c: keyof typeof SIGNAL_LABEL }) {
-  return <span className={`badge ${c}`} title={SIGNAL_TITLE[c]}>{c === 'LIVE_OFFER' ? '●' : c === 'SIMULATION' ? '◇' : '◆'} {SIGNAL_LABEL[c]}</span>;
+  return <span className={`badge ${c}`} title={SIGNAL_TITLE[c]}>{c === 'LIVE_OFFER' ? '●' : c === 'SIMULATION' ? '◇' : c === 'SYSTEM' ? '⚙' : '◆'} {SIGNAL_LABEL[c]}</span>;
+}
+
+/** Zusatzkennzeichen neben der Signalklasse: VERALTET und TEST. */
+export function ExtraLabels({ labels }: { labels?: string[] }) {
+  if (!labels) return null;
+  return <>{labels.filter(l => l === 'VERALTET' || l === 'TEST').map(l => (
+    <span key={l} className={`badge ${l === 'VERALTET' ? 'STALE' : 'SIMULATION'}`} title={l === 'VERALTET' ? 'Daten älter als die Frische-Grenze – vor einer Entscheidung neu prüfen.' : 'Erfundene Testdaten aus dem TEST-Feed.'}>{l === 'VERALTET' ? '⏱' : '◇'} {l}</span>
+  ))}</>;
 }
 
 const PRIO_LABEL = { HIGH: 'HIGH PRIORITY', MEDIUM: 'MEDIUM', WATCH: 'MARKET WATCH' } as const;

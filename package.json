@@ -1,6 +1,6 @@
 {
   "name": "mtg-deal-sniper",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "private": true,
   "description": "MTG Deal Sniper 2.1 – Business Edition: Marktanalyse, Profit-Engine, Einkauf, Lager, Verkauf, Versand und Erfolgskontrolle für den Handel mit Magic-Karten.",
   "type": "module",
@@ -15,6 +15,9 @@
     "import": "node --disable-warning=ExperimentalWarning server/src/cli.ts import",
     "analyze": "node --disable-warning=ExperimentalWarning server/src/cli.ts analyze",
     "token": "node --disable-warning=ExperimentalWarning server/src/cli.ts token",
+    "live:status": "node --disable-warning=ExperimentalWarning server/src/cli.ts live-status",
+    "live:poll": "node --disable-warning=ExperimentalWarning server/src/cli.ts live-poll",
+    "report": "node --disable-warning=ExperimentalWarning server/src/cli.ts report",
     "test": "node --disable-warning=ExperimentalWarning --test \"server/test/**/*.test.ts\"",
     "typecheck": "tsc -p server/tsconfig.json && tsc -p web/tsconfig.json"
   },

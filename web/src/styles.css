@@ -115,6 +115,11 @@ table.compact th, table.compact td { padding: 4px 8px; }
 .badge.MARKET_SIGNAL { color: #86b6ef; border-color: #1c5cab; background: rgba(57,135,229,.12); }
 .badge.LIVE_OFFER { color: #6fd36f; border-color: #0a6e0a; background: rgba(12,163,12,.12); }
 .badge.SIMULATION { color: var(--warning); border-color: #8a6100; background: repeating-linear-gradient(45deg, rgba(250,178,25,.12) 0 6px, transparent 6px 12px); }
+.badge.STALE { color: #f0a7a7; border-color: #9a3a3a; background: rgba(208,59,59,.12); }
+.badge.SYSTEM { color: #d0d0d0; border-color: #666; background: rgba(160,160,160,.12); }
+.live-banner { border-left: 4px solid; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; }
+.live-banner.on { border-color: #0a6e0a; background: rgba(12,163,12,.10); }
+.live-banner.off { border-color: #9a3a3a; background: rgba(208,59,59,.10); }
 .rec { font-weight: 600; font-size: 12px; }
 .rec.KAUFEN { color: #6fd36f; }
 .rec.PRÜFEN { color: var(--warning); }

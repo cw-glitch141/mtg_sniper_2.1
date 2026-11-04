@@ -117,6 +117,25 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: 'Live-Deal-Radar',
+    hint: 'Automatische Abfrage angebotsgenauer Feeds. CardTrader nur mit deinem EIGENEN Token (CARDTRADER_TOKEN in .env) und erst, nachdem du die API-Bedingungen von CardTrader selbst gelesen und hier bestätigt hast. Cardmarket-Angebote werden nicht automatisch abgefragt.',
+    fields: [
+      { path: 'live.enabled', label: 'Radar-Zeitplan aktiv', kind: 'bool' }, { path: 'live.pollIntervalMinutes', label: 'Abfrage alle … Min. (ab 2)' },
+      { path: 'live.maxTargets', label: 'Max. überwachte Varianten' }, { path: 'live.maxRequestsPerRun', label: 'Max. Anfragen je Lauf' },
+      { path: 'live.maxListingAgeMinutes', label: 'Feed-Angebot gilt … Min. als frisch' },
+      { path: 'live.minConservativeProfit', label: 'Kaufchance: konservativer Gewinn ≥ €' }, { path: 'live.minConservativeRoiPct', label: 'Kaufchance: konservativer ROI ≥ %' },
+      { path: 'live.target.minPrice', label: 'Zielmenge: Trend ab €' }, { path: 'live.target.maxPrice', label: 'Zielmenge: Trend bis €' },
+      { path: 'live.target.includeFoil', label: 'Zielmenge: Foil einbeziehen', kind: 'bool' },
+      { path: 'live.target.requireRecentSales', label: 'Zielmenge: nur mit belegten Verkäufen (1-/7-Tages-Ø)', kind: 'bool' },
+      { path: 'live.target.minVolatilityPct', label: 'Zielmenge: Mindestbewegung 1T vs. 7T %' }, { path: 'live.target.maxSpreadRatio', label: 'Zielmenge: max. Aggregat-Spreizung (Faktor)' },
+      { path: 'live.cardtrader.enabled', label: 'CardTrader-Feed aktivieren', kind: 'bool' },
+      { path: 'live.cardtrader.termsConfirmed', label: 'Ich habe die CardTrader-API-Bedingungen gelesen und nutze mein eigenes Token', kind: 'bool' },
+      { path: 'live.cardtrader.maxRequestsPerSecond', label: 'CardTrader: Anfragen/s (max. 10)' }, { path: 'live.cardtrader.blueprintRefreshDays', label: 'CardTrader: Zuordnung erneuern alle … Tage' },
+      { path: 'live.cardtrader.listingUrlTemplate', label: 'CardTrader: Link-Vorlage', kind: 'text' },
+      { path: 'alerts.types.system', label: 'Betreiber-Warnungen (Ausfall, veraltete Daten)', kind: 'bool' },
+    ],
+  },
+  {
     title: 'Zeitplan',
     fields: [
       { path: 'scheduler.enabled', label: 'Automatischer Import', kind: 'bool' }, { path: 'scheduler.checkIntervalMinutes', label: 'Prüfintervall (Min., ab 15)' },

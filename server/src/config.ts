@@ -2,9 +2,9 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const APP_NAME = 'MTG Deal Sniper 2.1 – Business Edition';
-export const APP_VERSION = '2.1.0';
-export const USER_AGENT = 'MTGDealSniper/2.1 (local, private use)';
+export const APP_NAME = 'MTG Deal Sniper 2.2 – Business Edition';
+export const APP_VERSION = '2.2.0';
+export const USER_AGENT = 'MTGDealSniper/2.2 (local, private use)';
 
 export const ROOT_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -27,7 +27,11 @@ export interface RuntimeConfig {
     telegramBotToken: string | null;
     telegramChatId: string | null;
     discordWebhookUrl: string | null;
+    /** Eigenes CardTrader-API-Token des Besitzers (Profil → Einstellungen). Nie fremde Tokens verwenden. */
+    cardtraderToken: string | null;
   };
+  /** Nur für Tests/Demo: simulierter Listing-Feed, alle Ergebnisse als SIMULATION/TEST gekennzeichnet. */
+  mockListingFeed: boolean;
   sources: {
     priceGuideUrl: string;
     productListUrl: string;
@@ -53,7 +57,9 @@ export function runtimeConfig(overrides: Partial<RuntimeConfig> = {}): RuntimeCo
       telegramBotToken: env.TELEGRAM_BOT_TOKEN || null,
       telegramChatId: env.TELEGRAM_CHAT_ID || null,
       discordWebhookUrl: env.DISCORD_WEBHOOK_URL || null,
+      cardtraderToken: env.CARDTRADER_TOKEN || null,
     },
+    mockListingFeed: env.MTGDS_MOCK_FEED === '1',
     sources: {
       priceGuideUrl: env.MTGDS_PRICE_GUIDE_URL ?? 'https://downloads.s3.cardmarket.com/productCatalog/priceGuide/price_guide_1.json',
       productListUrl: env.MTGDS_PRODUCT_LIST_URL ?? 'https://downloads.s3.cardmarket.com/productCatalog/productList/products_singles_1.json',
