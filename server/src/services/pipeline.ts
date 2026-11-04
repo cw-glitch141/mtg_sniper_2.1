@@ -10,6 +10,7 @@ import { collectAlerts, dealKey, dispatchAlerts, payloadFromOpportunity, type Ne
 import { runAnalysis, type AnalysisSummary } from './analysis.ts';
 import type { AppContext } from './context.ts';
 import { importCatalog, importPriceGuide, importScryfall, lastSuccess, type ImportResult } from './importer.ts';
+import { alertOperator } from './qualityReport.ts';
 
 const log = logger('pipeline');
 
@@ -116,6 +117,8 @@ export class Scheduler {
       }
       const sf = lastSuccess(this.ctx.db, 'scryfall');
       if (due || hoursSince(sf?.finished_at) >= s.scheduler.scryfallRefreshDays * 24) await runPipeline(this.ctx);
+      // Ausfälle und veraltete Daten sofort an den Betreiber melden (US-05), nicht erst im Tagesbericht.
+      await alertOperator(this.ctx);
       this.lastError = null;
     } catch (e) {
       this.lastError = (e as Error).message;

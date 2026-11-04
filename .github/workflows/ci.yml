@@ -1,0 +1,32 @@
+# Pflicht-Checks (US-06): laufen bei jedem Push und Pull Request sowie nachts.
+# Keine Secrets, keine Netzwerkzugriffe auf Datenquellen – alle Tests laufen gegen lokale Testdaten.
+name: CI
+
+on:
+  push:
+    branches: [main, 'feature/**', 'fix/**']
+  pull_request:
+  schedule:
+    - cron: '30 3 * * *'   # nächtlich: erkennt Brüche durch neue Abhängigkeits- oder Node-Versionen
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --no-fund --no-audit
+      - name: Typprüfung (Server + Dashboard)
+        run: npm run typecheck
+      - name: Tests (node:test)
+        run: npm test
+      - name: Dashboard bauen
+        run: npm run build

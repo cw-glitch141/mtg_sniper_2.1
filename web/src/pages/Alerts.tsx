@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { api, type AlertItem } from '../api';
 import { useShell } from '../App';
 import { dateTime, euro, pct } from '../format';
-import { Empty, ErrorNotice, PriorityBadge, SignalBadge, useAsync, useToast } from '../ui';
+import { Empty, ErrorNotice, ExtraLabels, PriorityBadge, SignalBadge, useAsync, useToast } from '../ui';
 
 const KIND_LABEL: Record<string, string> = {
-  live_offer: 'Live-Angebot', anomaly: 'Preisauffälligkeit', watchlist: 'Watchlist-Ziel', big_drop: 'Großer Preisrückgang', daily_movers: 'Tägliche Bewegungen', ranking: 'Ranking-Änderung',
+  live_offer: 'Live-Angebot', anomaly: 'Preisauffälligkeit', watchlist: 'Watchlist-Ziel', big_drop: 'Großer Preisrückgang', daily_movers: 'Tägliche Bewegungen', ranking: 'Ranking-Änderung', system: 'Betrieb (Ausfall/Datenalter)',
 };
 
 export function Alerts() {
@@ -45,7 +45,7 @@ export function Alerts() {
       </div>
       <div className="filters">
         <label className="field">Art<select value={kind} onChange={e => setKind(e.target.value)}><option value="">alle</option>{Object.entries(KIND_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
-        <label className="field">Signaltyp<select value={sig} onChange={e => setSig(e.target.value)}><option value="">alle</option><option value="LIVE_OFFER">Live-Angebot</option><option value="MARKET_SIGNAL">Marktsignal</option><option value="SIMULATION">Simulation</option></select></label>
+        <label className="field">Signaltyp<select value={sig} onChange={e => setSig(e.target.value)}><option value="">alle</option><option value="LIVE_OFFER">Live-Angebot</option><option value="MARKET_SIGNAL">Marktsignal</option><option value="SIMULATION">Simulation</option><option value="SYSTEM">System (Betrieb)</option></select></label>
         <label className="field">Priorität<select value={prio} onChange={e => setPrio(e.target.value)}><option value="">alle</option><option value="HIGH">HIGH PRIORITY</option><option value="MEDIUM">MEDIUM</option><option value="WATCH">MARKET WATCH</option></select></label>
         <label className="check"><input type="checkbox" checked={unread} onChange={e => setUnread(e.target.checked)} /> nur ungelesene</label>
       </div>
@@ -58,16 +58,24 @@ export function Alerts() {
               <div key={a.id} className="card" style={{ opacity: a.readAt ? 0.65 : 1 }}>
                 <div className="row">
                   <PriorityBadge p={a.priority} />
-                  <SignalBadge c={a.signalClass} />
+                  <SignalBadge c={a.signalClass} /> <ExtraLabels labels={p.labels} />
                   <span className="small muted">{KIND_LABEL[a.kind] ?? a.kind} · {dateTime(a.createdAt)}</span>
                   <span className="spacer" />
                   {!a.readAt && <button className="btn small" onClick={() => markRead(a.id)}>gelesen</button>}
                 </div>
                 <div style={{ fontWeight: 600, marginTop: 6 }}>{a.title}</div>
                 <div className="small" style={{ whiteSpace: 'pre-line' }}>{a.message}</div>
-                {(p.buyPrice != null || p.sellEstimate != null) && (
+                {a.signalClass !== 'MARKET_SIGNAL' && p.buyPrice != null && (
                   <div className="small" style={{ marginTop: 6 }}>
-                    Einkauf {euro(p.buyPrice)} · geschätzter Verkauf {euro(p.sellEstimate)} · Gewinn {euro(p.profit)} · ROI {pct(p.roiPct)} · Confidence {p.confidence ?? '–'}
+                    Angebot {euro(p.offerPrice ?? p.buyPrice)}{p.shipping != null ? ` + Porto ${euro(p.shipping)}` : ''} = {euro(p.buyPrice)}
+                    {p.condition ? ` · ${p.condition}` : ''}{p.language ? `/${p.language.toUpperCase()}` : ''}{p.seller ? ` · ${p.seller}` : ''}{p.listingId ? ` · ID ${p.listingId}` : ''}
+                    <br />Gewinn konservativ {euro(p.profitConservative)} · Basis {euro(p.profit)} (Verkauf {euro(p.sellEstimate)}, ROI {pct(p.roiPct)}) · Confidence {p.confidence ?? '–'}
+                  </div>
+                )}
+                {a.signalClass === 'MARKET_SIGNAL' && (p.marketPrice != null || p.referencePrice != null || p.reportedLow != null) && (
+                  <div className="small" style={{ marginTop: 6 }}>
+                    Referenz: Trend {euro(p.marketPrice)} · Median {euro(p.referencePrice)}{p.reportedLow != null ? ` · gemeldeter Tiefstpreis ${euro(p.reportedLow)}` : ''}
+                    {p.modelValue != null ? ` · Modellwert (hypothetisch) ${euro(p.modelValue)}` : ''} – kein Angebot, kein Gewinn belegt
                   </div>
                 )}
                 <div className="small muted" style={{ marginTop: 4 }}>

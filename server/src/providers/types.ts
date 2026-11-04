@@ -6,10 +6,9 @@
  *   - PriceProvider    'cardmarket_s3'    (öffentlicher täglicher Price Guide, aggregiert, KEINE Echtzeit-Angebote)
  *   - MappingProvider  'scryfall'         (Set-Code, Collector Number, Seltenheit, Bild)
  *   - Angebote         'extension' / 'manual' / 'simulation' über POST /api/offers
- *
- * Für einen später zugelassenen Live-Angebotsfeed (offizielle Cardmarket-API oder lizenzierter Feed)
- * wird ein OfferProvider implementiert und in providers/registry.ts eingetragen. Der Rest der
- * Anwendung (Bewertung, Alerts, Dashboard) arbeitet bereits mit dem allgemeinen Angebotsformat.
+ *   - Listing-Feeds    providers/listings.ts (ListingProvider), z. B. 'api:cardtrader' – nur mit
+ *                      eigenem Token und bestätigten Nutzungsbedingungen aktiv; 'test:mock-feed' nur für Tests.
+ * Alle Quellen münden in dasselbe Angebotsformat (OfferInput) und dieselbe Bewertung.
  */
 import type { Condition, Finish } from '../domain/types.ts';
 import type { Conditional, HttpMeta } from './http.ts';
@@ -62,11 +61,14 @@ export interface OfferInput {
   sellerSales?: number | null;
   url?: string | null;
   observedAt?: string | null;
-}
-
-export interface OfferProvider {
-  id: string;                         // z. B. 'api:cardmarket' – wird als Angebotsquelle gespeichert
-  signalClass: 'LIVE_OFFER';
-  /** Aktuelle Angebote für die angegebenen Produkte abrufen (nur mit gültiger Zulassung!). */
-  fetchOffers(productExternalIds: number[]): Promise<OfferInput[]>;
+  // --- ab 2.2, nur von Listing-Feeds gesetzt (Extension/CSV bleiben unverändert gültig) ---
+  currency?: string | null;
+  /** Porto je Karte laut Quelle; null/fehlend = aus den Porto-Einstellungen schätzen. */
+  shipping?: number | null;
+  sourceTimestamp?: string | null;
+  fetchedAt?: string | null;
+  expiresAt?: string | null;
+  sourceAuthorized?: boolean | null;
+  reviewStatus?: 'ok' | 'review' | null;
+  reviewReasons?: string[] | null;
 }

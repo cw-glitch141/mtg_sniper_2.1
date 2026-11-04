@@ -65,7 +65,7 @@ export function DataSources() {
             <dt>Preisreihen</dt><dd>{int(status.counts.priceSeries)}</dd>
             <dt>Eigene Historie</dt><dd>{int(status.counts.historyDays)} Tag(e), {int(status.counts.snapshots)} Snapshots – entsteht ausschließlich durch die täglichen Importe, nichts wird rückwirkend ergänzt.</dd>
             <dt>Live-Angebote</dt><dd>{int(status.counts.liveOffers)} (+ {int(status.counts.simulatedOffers)} simuliert)</dd>
-            <dt>Live-Angebotsfeed</dt><dd>{status.liveOfferProviders.length ? status.liveOfferProviders.join(', ') : 'keiner angebunden (keine Cardmarket-API-Zulassung) – Angebote nur über Erweiterung/Import'}</dd>
+            <dt>Live-Angebotsfeed</dt><dd>{status.live?.headline ?? '–'} <a href="#/live">Live-Radar →</a></dd>
             <dt>Zeitplan</dt><dd>{status.scheduler?.running ? `aktiv, letzte Prüfung ${age(status.scheduler.lastTickAt)}` : 'aus'}{status.scheduler?.lastError ? ` · Fehler: ${status.scheduler.lastError}` : ''}</dd>
             <dt>Letzte Analyse</dt><dd>{status.analysis ? `${dateTime(status.analysis.finished_at)}: ${int(status.analysis.candidates)} Kandidaten, ${int(status.analysis.opportunities)} Möglichkeiten. ${status.analysis.message ?? ''}` : '–'}</dd>
           </dl>

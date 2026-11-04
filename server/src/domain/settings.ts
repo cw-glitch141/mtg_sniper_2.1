@@ -74,7 +74,7 @@ export interface AppSettings {
     cooldownHours: number;
     topN: number;
     channels: { dashboard: boolean; desktop: boolean; telegram: boolean; discord: boolean };
-    types: { dailyMovers: boolean; anomalies: boolean; liveOffers: boolean; watchlist: boolean; bigDrops: boolean; rankingChanges: boolean };
+    types: { dailyMovers: boolean; anomalies: boolean; liveOffers: boolean; watchlist: boolean; bigDrops: boolean; rankingChanges: boolean; system: boolean };
     /** HIGH PRIORITY: frisches Live-Angebot mit hoher konservativer Rentabilität und eingehaltenen Limits. */
     highMinConservativeProfit: number;
     highMinConservativeRoiPct: number;
@@ -103,6 +103,35 @@ export interface AppSettings {
     locationPattern: string;         // Regulärer Ausdruck für Lagerplatz-Codes, z. B. A01
     overdueShipDays: number;         // Aufträge älter als n Tage ohne Versand → priorisieren
     archiveAfterDays: number;
+  };
+  /**
+   * Live-Deal-Radar (2.2): automatische Abfrage angebotsgenauer Feeds. Ohne autorisierte, konfigurierte
+   * Quelle bleibt das Radar aus und meldet das ausdrücklich.
+   */
+  live: {
+    enabled: boolean;
+    pollIntervalMinutes: number;     // Abstand zwischen zwei Abfragen (Untergrenze 2 Minuten)
+    maxTargets: number;              // so viele Varianten werden höchstens überwacht
+    maxRequestsPerRun: number;       // Anfrage-Budget je Lauf (zusätzlich zum Rate-Limit des Anbieters)
+    maxListingAgeMinutes: number;    // ältere Feed-Beobachtungen gelten nicht mehr als Kaufchance
+    minConservativeProfit: number;   // Kaufchance aus dem Feed nur ab diesem konservativen Ertrag (€)
+    minConservativeRoiPct: number;
+    target: {
+      minPrice: number;              // Zielmenge: Preisband (Trend, €)
+      maxPrice: number;
+      includeFoil: boolean;
+      requireRecentSales: boolean;   // nur Varianten mit 1- und 7-Tages-Ø (Verkäufe belegt)
+      minVolatilityPct: number;      // Mindestabweichung 1-Tages-Ø ggü. 7-Tages-Ø (0 = aus)
+      maxSpreadRatio: number;        // Aggregate weiter auseinander → zu riskant/ausreißerverdächtig
+    };
+    cardtrader: {
+      enabled: boolean;
+      /** Der Besitzer bestätigt, die CardTrader-API-Bedingungen gelesen zu haben und sein EIGENES Token zu nutzen. */
+      termsConfirmed: boolean;
+      maxRequestsPerSecond: number;  // dokumentiert: 10/s für Marketplace – wir bleiben bewusst darunter
+      blueprintRefreshDays: number;
+      listingUrlTemplate: string;    // {blueprint_id} und {listing_id} werden ersetzt
+    };
   };
   repricing: {
     targetProfit: number;            // gewünschter Deckungsbeitrag je Karte (€)
@@ -174,7 +203,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
     cooldownHours: 24,
     topN: 10,
     channels: { dashboard: true, desktop: true, telegram: false, discord: false },
-    types: { dailyMovers: true, anomalies: true, liveOffers: true, watchlist: true, bigDrops: true, rankingChanges: true },
+    types: { dailyMovers: true, anomalies: true, liveOffers: true, watchlist: true, bigDrops: true, rankingChanges: true, system: true },
     highMinConservativeProfit: 3,
     highMinConservativeRoiPct: 10,
     highMinConfidence: 65,
@@ -187,6 +216,23 @@ export const DEFAULT_SETTINGS: AppSettings = {
     laborMinutesPerOrder: 6, laborMinutesPerCard: 1.5, laborMinutesPerPurchase: 4,
     defaultPackagingCost: 0.35, defaultShippingCost: 1.25, defaultTrackedShippingCost: 3.95, trackedFromOrderValue: 25,
     defaultWarehouse: 'HAUPT', locationPattern: '^[A-Z]{1,2}[0-9]{2,3}$', overdueShipDays: 2, archiveAfterDays: 30,
+  },
+  live: {
+    enabled: true,
+    pollIntervalMinutes: 10,
+    maxTargets: 300,
+    maxRequestsPerRun: 400,
+    maxListingAgeMinutes: 60,
+    minConservativeProfit: 2,
+    minConservativeRoiPct: 5,
+    target: { minPrice: 15, maxPrice: 500, includeFoil: true, requireRecentSales: true, minVolatilityPct: 0, maxSpreadRatio: 3 },
+    cardtrader: {
+      enabled: false,
+      termsConfirmed: false,
+      maxRequestsPerSecond: 4,
+      blueprintRefreshDays: 7,
+      listingUrlTemplate: 'https://www.cardtrader.com/cards/{blueprint_id}',
+    },
   },
   repricing: {
     targetProfit: 2, targetMarginPct: 10, absoluteMinPrice: 0.25,
@@ -254,5 +300,9 @@ export function mergeSettings(base: AppSettings, patch: Json): { settings: AppSe
   try { new RegExp(merged.business.locationPattern); } catch { errors.push('settings.business.locationPattern: ungültiger regulärer Ausdruck'); merged.business.locationPattern = base.business.locationPattern; }
   if (merged.limits.maxSlowMoverSharePct > 100) errors.push('settings.limits.maxSlowMoverSharePct: höchstens 100');
   if (merged.fees.commissionPct >= 100) errors.push('settings.fees.commissionPct: muss unter 100 liegen');
+  if (merged.live.pollIntervalMinutes < 2) errors.push('settings.live.pollIntervalMinutes: mindestens 2 Minuten');
+  if (merged.live.cardtrader.maxRequestsPerSecond > 10) errors.push('settings.live.cardtrader.maxRequestsPerSecond: höchstens 10 (dokumentiertes Limit)');
+  if (merged.live.target.minPrice > merged.live.target.maxPrice) errors.push('settings.live.target: minPrice darf nicht größer als maxPrice sein');
+  if (!/^https:\/\//.test(merged.live.cardtrader.listingUrlTemplate)) errors.push('settings.live.cardtrader.listingUrlTemplate: muss mit https:// beginnen');
   return { settings: merged, errors };
 }

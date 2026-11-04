@@ -18,17 +18,24 @@ import { listWatch, nameKey, offerMatchesEntry } from './watchlist.ts';
 
 const log = logger('alerts');
 
-export type AlertKind = 'live_offer' | 'anomaly' | 'watchlist' | 'big_drop' | 'daily_movers' | 'ranking';
-export const SIGNAL_LABEL: Record<SignalClass, string> = { MARKET_SIGNAL: 'MARKTSIGNAL', LIVE_OFFER: 'LIVE-ANGEBOT', SIMULATION: 'SIMULATION' };
+export type AlertKind = 'live_offer' | 'anomaly' | 'watchlist' | 'big_drop' | 'daily_movers' | 'ranking' | 'system';
+/** SYSTEM = Betreiber-Meldung (Datenausfall, Feed-Fehler) – nie ein Handelssignal. */
+export type AlertClass = SignalClass | 'SYSTEM';
+export const SIGNAL_LABEL: Record<AlertClass, string> = { MARKET_SIGNAL: 'MARKTSIGNAL', LIVE_OFFER: 'LIVE-ANGEBOT', SIMULATION: 'SIMULATION', SYSTEM: 'SYSTEM' };
 
 export interface AlertPayload {
-  name?: string; setName?: string | null; condition?: string | null; language?: string | null; finish?: string;
-  buyPrice?: number | null; sellEstimate?: number | null; profit?: number | null; roiPct?: number | null;
+  name?: string; setName?: string | null; setCode?: string | null; condition?: string | null; language?: string | null; finish?: string;
+  /** Nur bei belegten Angeboten: Einkauf inkl. Porto. Bei Marktsignalen immer leer. */
+  buyPrice?: number | null; offerPrice?: number | null; shipping?: number | null; shippingNote?: string | null;
+  sellEstimate?: number | null; profit?: number | null; profitConservative?: number | null; roiPct?: number | null; roiConservativePct?: number | null;
+  /** Marktsignale: Referenzwerte und ein ausdrücklich hypothetischer Modellwert. */
+  referencePrice?: number | null; marketPrice?: number | null; modelValue?: number | null; reportedLow?: number | null;
+  seller?: string | null; sellerCountry?: string | null; listingId?: string | null; labels?: string[];
   confidence?: number | null; score?: number | null; dataDate?: string | null; observedAt?: string | null;
   source?: string | null; url?: string | null; productUrl?: string | null; opportunityKey?: string; extra?: unknown;
 }
 
-export interface NewAlert { kind: AlertKind; signalClass: SignalClass; priority: Priority | null; dedupeKey: string; productId: number | null; title: string; message: string; payload: AlertPayload }
+export interface NewAlert { kind: AlertKind; signalClass: AlertClass; priority: Priority | null; dedupeKey: string; productId: number | null; title: string; message: string; payload: AlertPayload }
 
 export const PRIORITY_LABEL: Record<Priority, string> = { HIGH: 'HIGH PRIORITY', MEDIUM: 'MEDIUM PRIORITY', WATCH: 'MARKET WATCH' };
 const PRIORITY_RANK: Record<Priority, number> = { HIGH: 0, MEDIUM: 1, WATCH: 2 };
@@ -41,22 +48,41 @@ const fmt = (v: number | null | undefined) => (v == null ? '–' : v.toLocaleStr
 const fmtTs = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString('de-DE', { timeZone: 'Europe/Berlin', dateStyle: 'short', timeStyle: 'short' }) : '–');
 
 export function payloadFromOpportunity(o: Opportunity): AlertPayload {
+  const common = {
+    name: o.name, setName: o.setName, setCode: o.setCode, finish: o.finish, labels: o.labels ?? [o.signalClass],
+    confidence: o.score.confidence, score: o.score.score, dataDate: o.dataDate, source: o.buy.source,
+    productUrl: o.productUrl, opportunityKey: o.key, referencePrice: o.referencePrice, marketPrice: o.marketPrice,
+  };
+  if (o.signalClass === 'MARKET_SIGNAL') {
+    // Kein Einkaufspreis und kein Gewinn: zu diesen Werten ist kein Angebot belegt.
+    return { ...common, condition: null, language: null, modelValue: o.buy.price, reportedLow: o.guide?.low ?? null, observedAt: null, url: null };
+  }
   return {
-    name: o.name, setName: o.setName, condition: o.buy.condition, language: o.buy.language, finish: o.finish,
-    buyPrice: o.buy.effective, sellEstimate: o.resale.base, profit: o.scenarios.base?.profit ?? null, roiPct: o.scenarios.base?.roiPct ?? null,
-    confidence: o.score.confidence, score: o.score.score, dataDate: o.dataDate,
-    observedAt: o.signalClass === 'MARKET_SIGNAL' ? null : o.buy.observedAt, source: o.buy.source,
-    url: o.buy.offerUrl, productUrl: o.productUrl, opportunityKey: o.key,
+    ...common, condition: o.buy.condition, language: o.buy.language,
+    buyPrice: o.buy.effective, offerPrice: o.buy.price, shipping: o.buy.shipping, shippingNote: o.buy.shippingNote,
+    sellEstimate: o.resale.base, profit: o.scenarios.base?.profit ?? null, roiPct: o.scenarios.base?.roiPct ?? null,
+    profitConservative: o.scenarios.conservative?.profit ?? null, roiConservativePct: o.scenarios.conservative?.roiPct ?? null,
+    seller: o.buy.seller, sellerCountry: o.buy.sellerCountry, listingId: o.buy.externalId ?? null,
+    observedAt: o.buy.observedAt, url: o.buy.offerUrl,
   };
 }
 
 /** Einheitlicher Text für alle Kanäle – enthält Signalklasse, Quelle und Zeitstempel. */
-export function formatAlertText(a: { signalClass: SignalClass; priority?: Priority | null; title: string; message: string; payload: AlertPayload }): string {
+export function formatAlertText(a: { signalClass: AlertClass; priority?: Priority | null; title: string; message: string; payload: AlertPayload }): string {
   const p = a.payload;
-  const lines = [`[${a.priority ? PRIORITY_LABEL[a.priority] + ' · ' : ''}${SIGNAL_LABEL[a.signalClass]}] ${a.title}`];
+  const tags = (p.labels?.length ? p.labels : [SIGNAL_LABEL[a.signalClass]]).join(' · ');
+  const lines = [`[${a.priority ? PRIORITY_LABEL[a.priority] + ' · ' : ''}${tags}] ${a.title}`];
   if (a.message) lines.push(a.message);
-  if (p.buyPrice != null || p.sellEstimate != null) {
-    lines.push(`Einkauf ${fmt(p.buyPrice)} · Verkauf (Basis) ${fmt(p.sellEstimate)} · Gewinn ${fmt(p.profit)} · ROI ${p.roiPct == null ? '–' : p.roiPct + ' %'}`);
+  if (a.signalClass !== 'MARKET_SIGNAL' && p.buyPrice != null) {
+    const what = [p.setName ? `${p.setName}${p.setCode ? ' (' + p.setCode.toUpperCase() + ')' : ''}` : null, p.finish === 'foil' ? 'Foil' : null,
+      p.condition, p.language?.toUpperCase()].filter(Boolean).join(' · ');
+    if (what) lines.push(what);
+    lines.push(`Angebot ${fmt(p.offerPrice)} + Porto ${fmt(p.shipping)}${p.shippingNote ? ' (' + p.shippingNote + ')' : ''} = ${fmt(p.buyPrice)}` +
+      (p.seller ? ` · Verkäufer ${p.seller}${p.sellerCountry ? ' (' + p.sellerCountry + ')' : ''}` : '') + (p.listingId ? ` · Angebots-ID ${p.listingId}` : ''));
+    lines.push(`Gewinn konservativ ${fmt(p.profitConservative)} · Basis ${fmt(p.profit)} (Verkauf ${fmt(p.sellEstimate)}, ROI ${p.roiPct == null ? '–' : p.roiPct + ' %'})`);
+  } else if (a.signalClass === 'MARKET_SIGNAL' && (p.marketPrice != null || p.referencePrice != null || p.reportedLow != null)) {
+    lines.push(`Referenz: Trend ${fmt(p.marketPrice)} · Median ${fmt(p.referencePrice)}${p.reportedLow != null ? ` · gemeldeter Tiefstpreis ${fmt(p.reportedLow)}` : ''}` +
+      (p.modelValue != null ? ` · Modellwert (hypothetisch) ${fmt(p.modelValue)}` : ''));
   }
   const meta: string[] = [];
   if (p.confidence != null) meta.push(`Confidence ${p.confidence}`);
@@ -66,6 +92,7 @@ export function formatAlertText(a: { signalClass: SignalClass; priority?: Priori
   if (meta.length) lines.push(meta.join(' · '));
   if (a.signalClass === 'MARKET_SIGNAL') lines.push('Kein konkretes Angebot bekannt – vor dem Kauf auf Cardmarket prüfen.');
   if (a.signalClass === 'SIMULATION') lines.push('Testdaten – keine Kaufmöglichkeit.');
+  if (a.signalClass === 'LIVE_OFFER') lines.push('Vor der Zahlung auf der Angebotsseite prüfen: Preis, Zustand, Sprache und Verfügbarkeit können sich geändert haben. Kauf nur manuell.');
   const link = p.url ?? p.productUrl;
   if (link) lines.push(link);
   return lines.join('\n');
@@ -119,7 +146,7 @@ export function collectAlerts(ctx: AppContext, summary: AnalysisSummary | null):
           out.push({ kind: 'watchlist', signalClass: 'MARKET_SIGNAL', priority: 'WATCH', productId: r.id, dedupeKey: `watchmarket:${e.id}:${r.source_created_at.slice(0, 10)}`,
             title: `${e.name}: gemeldeter Tiefstpreis ${fmt(r.low)} ≤ Ziel ${fmt(target)}`,
             message: `${r.set_name ?? ''}${r.finish === 'foil' ? ' Foil' : ''} – Zustand/Sprache unbekannt, Angebot evtl. nicht mehr verfügbar.`,
-            payload: { name: r.name, setName: r.set_name, finish: r.finish, buyPrice: r.low, dataDate: r.source_created_at, source: 'cardmarket_price_guide', productUrl: `https://www.cardmarket.com/de/Magic/Products?idProduct=${r.external_id}` } });
+            payload: { name: r.name, setName: r.set_name, finish: r.finish, reportedLow: r.low, labels: ['MARKTSIGNAL'], dataDate: r.source_created_at, source: 'cardmarket_price_guide', productUrl: `https://www.cardmarket.com/de/Magic/Products?idProduct=${r.external_id}` } });
         }
       }
     }
@@ -253,7 +280,7 @@ export function listAlerts(db: Db, opts: { sinceId?: number; unreadOnly?: boolea
   if (opts.signalClass) { where.push('signal_class = ?'); p.push(opts.signalClass); }
   const rows = db.all<Record<string, unknown>>('SELECT * FROM alerts' + (where.length ? ' WHERE ' + where.join(' AND ') : '') + ' ORDER BY id DESC LIMIT ?', [...p, opts.limit ?? 100]);
   return rows.map(r => ({
-    id: r.id, kind: r.kind, signalClass: r.signal_class, signalLabel: SIGNAL_LABEL[r.signal_class as SignalClass],
+    id: r.id, kind: r.kind, signalClass: r.signal_class, signalLabel: SIGNAL_LABEL[r.signal_class as AlertClass] ?? String(r.signal_class),
     priority: r.priority ?? null, priorityLabel: r.priority ? PRIORITY_LABEL[r.priority as Priority] : null, title: r.title, message: r.message,
     payload: parseJson<AlertPayload>(r.payload, {}), createdAt: r.created_at, readAt: r.read_at, deliveries: parseJson<Record<string, string>>(r.deliveries, {}),
   }));

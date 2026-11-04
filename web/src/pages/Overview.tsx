@@ -29,17 +29,17 @@ function MoversCard({ dir }: { dir: 'down' | 'up' }) {
 
 export function Overview() {
   const { status, openProduct, navigate } = useShell();
-  const best = useAsync(() => api.get<OppList>('/api/opportunities?rulesPassed=1&limit=8'), []);
+  const best = useAsync(() => api.get<OppList>('/api/opportunities?signalClass=LIVE_OFFER&rulesPassed=1&limit=8'), []);
   const live = useAsync(() => api.get<OppList>('/api/opportunities?signalClass=LIVE_OFFER&limit=6&sort=profit'), []);
-  const profit = useAsync(() => api.get<OppList>('/api/opportunities?rulesPassed=1&sort=profit&limit=6'), []);
-  const roi = useAsync(() => api.get<OppList>('/api/opportunities?rulesPassed=1&sort=roi&limit=6'), []);
+  const profit = useAsync(() => api.get<OppList>('/api/opportunities?signalClass=LIVE_OFFER&rulesPassed=1&sort=profit&limit=6'), []);
+  const roi = useAsync(() => api.get<OppList>('/api/opportunities?signalClass=LIVE_OFFER&rulesPassed=1&sort=roi&limit=6'), []);
   const alerts = useAsync(() => api.get<AlertItem[]>('/api/alerts?limit=8'), []);
   const watch = useAsync(() => api.get<WatchEntry[]>('/api/watchlist'), []);
   const portfolio = useAsync(() => api.get<Portfolio>('/api/portfolio'), []);
   const orders = useAsync(() => api.get<OrderList>('/api/orders?active=1&limit=1'), []);
   const counts = useAsync(() => Promise.all([
     api.get<OppList>('/api/opportunities?recommendation=KAUFEN&limit=1'),
-    api.get<OppList>('/api/opportunities?recommendation=PRÜFEN&limit=1'),
+    api.get<OppList>('/api/opportunities?signalClass=MARKET_SIGNAL&limit=1'),
   ]), []);
 
   const open = (o: { productId: number; key: string }) => openProduct(o.productId, o.key);
@@ -60,20 +60,26 @@ export function Overview() {
         </div>
       )}
       {status && status.warnings.length > 0 && (
-        <div className="notice warn"><strong>Hinweise zur Datenlage</strong><ul>{status.warnings.filter(w => !failing.some(f => w.startsWith(f.label))).map(w => <li key={w}>{w}</li>)}</ul></div>
+        <div className="notice warn"><strong>Hinweise zur Datenlage</strong><ul>{status.warnings.filter(w => !failing.some(f => w.startsWith(f.label)) && w !== status.live?.headline).map(w => <li key={w}>{w}</li>)}</ul></div>
+      )}
+
+      {status?.live && (
+        <div className={`live-banner ${status.live.available ? 'on' : 'off'}`} role="status">
+          <strong>Live-Radar:</strong> {status.live.headline} <a href="#/live">Details →</a>
+        </div>
       )}
 
       <div className="tiles">
         <div className="card tile"><div className="label">Kaufempfehlungen</div><div className="value">{int(counts.data?.[0].total)}</div><div className="hint">nur Live-Angebote, alle Regeln erfüllt</div></div>
-        <div className="card tile"><div className="label">Zu prüfen</div><div className="value">{int(counts.data?.[1].total)}</div><div className="hint">Marktsignale – Angebot suchen</div></div>
-        <div className="card tile"><div className="label">Live-Angebote</div><div className="value">{int(status?.counts.liveOffers)}</div><div className="hint">aus Extension / manuell</div></div>
+        <div className="card tile clickable" onClick={() => navigate('market')}><div className="label">Marktsignale (Recherche)</div><div className="value">{int(counts.data?.[1].total)}</div><div className="hint">kein Angebot – erst Angebot suchen</div></div>
+        <div className="card tile"><div className="label">Live-Angebote</div><div className="value">{int(status?.counts.liveOffers)}</div><div className="hint">{status?.live?.available ? 'Extension, CSV und Live-Feed' : 'aus Extension / CSV – kein Live-Feed'}</div></div>
         <div className="card tile"><div className="label">Ungelesene Alarme</div><div className="value">{int(status?.counts.unreadAlerts)}</div></div>
         <div className="card tile clickable" onClick={() => navigate('capital')}><div className="label">Verfügbares Kapital</div><div className="value">{portfolio.data?.overview.capitalTracked ? euro(portfolio.data.overview.availableCapital) : '–'}</div><div className="hint">{portfolio.data?.overview.capitalTracked ? `im Lager ${euro(portfolio.data.overview.investedInStock)}` : 'Einlage unter Capital & Risk buchen'}</div></div>
         <div className="card tile clickable" onClick={() => navigate('orders')}><div className="label">Offene Aufträge</div><div className="value">{int(orders.data?.total)}</div><div className="hint">Realisierter DB {euro(portfolio.data?.overview.realizedContribution)}</div></div>
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head"><h2>Beste aktuelle Gelegenheiten</h2><span className="small muted">alle Kaufregeln erfüllt</span><a className="more" href="#/scanner?rulesPassed=1">Alle im Scanner →</a></div>
+        <div className="card-head"><h2>Beste aktuelle Angebote</h2><span className="small muted">belegte Einzelangebote, alle Kaufregeln erfüllt</span><a className="more" href="#/scanner?rulesPassed=1">Alle im Scanner →</a></div>
         <ErrorNotice error={best.error} />
         {best.data && (best.data.items.length ? <OppTable items={best.data.items} onOpen={open} compact /> :
           <Empty>Aktuell erfüllt keine Möglichkeit alle Kaufregeln. Das ist bei wenig Historie und ohne Live-Angebote normal – siehe Hinweise oben.</Empty>)}
@@ -81,13 +87,13 @@ export function Overview() {
 
       <div className="grid cols-3" style={{ marginBottom: 16 }}>
         <div className="card">
-          <div className="card-head"><h2>Höchste Nettoerträge</h2></div>
+          <div className="card-head"><h2>Höchste Nettoerträge</h2><span className="small muted">nur Angebote</span></div>
           {profit.data?.items.length ? <table className="compact"><tbody>{profit.data.items.map(o => (
             <tr key={o.key} className="clickable" onClick={() => open(o)}><td className="wrap">{o.name}<div className="small muted">{o.setName}</div></td><td className="num pos">{euro(o.scenarios.base?.profit)}</td></tr>
           ))}</tbody></table> : <Empty>–</Empty>}
         </div>
         <div className="card">
-          <div className="card-head"><h2>ROI-Rangliste</h2></div>
+          <div className="card-head"><h2>ROI-Rangliste</h2><span className="small muted">nur Angebote</span></div>
           {roi.data?.items.length ? <table className="compact"><tbody>{roi.data.items.map(o => (
             <tr key={o.key} className="clickable" onClick={() => open(o)}><td className="wrap">{o.name}<div className="small muted">{euro(o.buy.effective)} Einsatz</div></td><td className="num">{pct(o.scenarios.base?.roiPct)}</td></tr>
           ))}</tbody></table> : <Empty>–</Empty>}

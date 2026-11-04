@@ -11,7 +11,7 @@ interface Filters {
   minPrice: number | null; maxPrice: number | null; rulesPassed: boolean; sort: SortKey; dir: 'asc' | 'desc';
 }
 const DEFAULTS: Filters = {
-  q: '', signalClass: '', strategy: '', recommendation: '', finish: '', risk: '', priority: '', minScore: null, minConfidence: null,
+  q: '', signalClass: 'LIVE_OFFER', strategy: '', recommendation: '', finish: '', risk: '', priority: '', minScore: null, minConfidence: null,
   minProfit: null, minRoi: null, minPrice: null, maxPrice: null, rulesPassed: false, sort: 'score', dir: 'desc',
 };
 const PAGE = 100;
@@ -19,7 +19,7 @@ const PAGE = 100;
 interface View { id: number; name: string; config: Partial<Filters> }
 
 export function Scanner() {
-  const { openProduct, params } = useShell();
+  const { openProduct, params, status } = useShell();
   const toast = useToast();
   const [f, setF] = useState<Filters>(() => ({ ...DEFAULTS, rulesPassed: params.get('rulesPassed') === '1', q: params.get('q') ?? '' }));
   const [q, setQ] = useState(f.q);
@@ -41,7 +41,8 @@ export function Scanner() {
   };
   const applyView = (id: string) => {
     const v = views.data?.find(x => String(x.id) === id);
-    if (v) { setF({ ...DEFAULTS, ...v.config }); setQ(v.config.q ?? ''); }
+    // Ältere Ansichten konnten Marktsignale enthalten – diese Liste zeigt nur noch Angebote.
+    if (v) { setF({ ...DEFAULTS, ...v.config, signalClass: v.config.signalClass === 'SIMULATION' ? 'SIMULATION' : 'LIVE_OFFER' }); setQ(v.config.q ?? ''); }
   };
   const deleteView = async (id: string) => {
     if (!id || !confirm('Ansicht löschen?')) return;
@@ -52,8 +53,8 @@ export function Scanner() {
   return (
     <>
       <div className="page-head">
-        <h1>Trading Opportunities</h1>
-        <span className="sub">{data ? `${int(data.total)} Möglichkeiten` : ''}</span>
+        <h1>Kaufchancen</h1>
+        <span className="sub">{data ? `${int(data.total)} erfasste Angebote` : ''} · nur belegte Einzelangebote</span>
         <div className="actions">
           <select value={selView} onChange={e => { setSelView(e.target.value); applyView(e.target.value); }} aria-label="Gespeicherte Ansicht">
             <option value="">Gespeicherte Ansichten …</option>
@@ -67,13 +68,9 @@ export function Scanner() {
 
       <div className="card filters">
         <label className="field">Suche<input type="search" placeholder="Kartenname" value={q} onChange={e => setQ(e.target.value)} /></label>
-        <label className="field">Signaltyp
+        <label className="field">Quelle
           <select value={f.signalClass} onChange={e => set('signalClass', e.target.value)}>
-            <option value="">alle</option><option value="LIVE_OFFER">Live-Angebot</option><option value="MARKET_SIGNAL">Marktsignal</option><option value="SIMULATION">Simulation</option>
-          </select></label>
-        <label className="field">Strategie
-          <select value={f.strategy} onChange={e => set('strategy', e.target.value)}>
-            <option value="">alle</option><option value="underpriced_offer">Einzelangebot</option><option value="price_dip">Price-Dip</option><option value="volatility">Volatilität</option><option value="spread_low">Spread Tiefstpreis</option>
+            <option value="LIVE_OFFER">Live-Angebote</option><option value="SIMULATION">Simulation / TEST</option>
           </select></label>
         <label className="field">Empfehlung
           <select value={f.recommendation} onChange={e => set('recommendation', e.target.value)}>
@@ -97,8 +94,11 @@ export function Scanner() {
       </div>
 
       <ErrorNotice error={error} />
+      {status?.live && !status.live.available && (
+        <div className="notice warn">{status.live.headline} – diese Liste enthält deshalb nur Angebote aus der Browser-Erweiterung und dem CSV-Import. <a href="#/live">Live-Radar →</a></div>
+      )}
       {data && (data.items.length ? <OppTable items={data.items} onOpen={o => openProduct(o.productId, o.key)} sort={f.sort} dir={f.dir} onSort={onSort} /> :
-        <Empty>{data.runId == null ? 'Noch keine Analyse – unter „Datenquellen“ einen Import starten.' : 'Keine Treffer für diese Filter.'}</Empty>)}
+        <Empty>{data.runId == null ? 'Noch keine Analyse – unter „Datenquellen“ einen Import starten.' : 'Keine erfassten Angebote für diese Filter. Marktsignale (Price-Dip, Volatilität, Tiefstpreis) stehen unter „Market Watch / Recherche“.'}</Empty>)}
       {loading && !data && <Empty>Lade …</Empty>}
       {data && data.total > PAGE && (
         <div className="row" style={{ marginTop: 12, justifyContent: 'center' }}>
@@ -108,8 +108,8 @@ export function Scanner() {
         </div>
       )}
       <p className="small muted" style={{ marginTop: 12 }}>
-        Zeile anklicken für Kalkulation, Preisdiagramm und Begründung. <strong>Marktsignale</strong> beruhen auf aggregierten Tageswerten des Cardmarket Price Guide und sind keine kaufbaren Angebote.
-        <strong> Live-Angebote</strong> wurden tatsächlich beobachtet (Zeitpunkt in der Detailansicht).
+        Zeile anklicken für Kalkulation, Preisdiagramm und Begründung. <strong>KAUFEN</strong> erscheint nur bei einem konkreten, vollständigen und frischen Angebot (Verkäufer, Preis, Link, Zustand, Sprache), das auch im konservativen Szenario trägt.
+        Eine alte Beobachtung belegt nicht, dass das Angebot noch verfügbar ist – vor der Zahlung immer auf der Angebotsseite prüfen. <a href="#/market">Marktsignale → Market Watch</a>
       </p>
     </>
   );

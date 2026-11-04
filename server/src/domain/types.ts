@@ -71,4 +71,17 @@ export interface ObservedOffer {
   url: string | null;
   observedAt: string;
   previousPrice: number | null;
+  firstSeenAt?: string;
+  // ab 2.2 (Listing-Feeds); bei Extension/CSV meist null
+  currency?: string | null;
+  shipping?: number | null;
+  sourceTimestamp?: string | null;
+  fetchedAt?: string | null;
+  expiresAt?: string | null;
+  sourceAuthorized?: boolean | null;
+  reviewStatus?: 'ok' | 'review' | null;
+  reviewReasons?: string[];
 }
+
+/** Woraus eine Möglichkeit abgeleitet ist – entscheidet, ob Einkauf/Gewinn überhaupt angezeigt werden dürfen. */
+export type Evidence = 'listing' | 'market_model' | 'simulation';

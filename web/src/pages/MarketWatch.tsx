@@ -1,14 +1,14 @@
 import { useState } from 'react';
 import { api, type AlertItem, type Movers, type OppList } from '../api';
 import { useShell } from '../App';
-import { OppTable } from '../components/OppTable';
+import { MarketSignalTable } from '../components/MarketSignalTable';
 import { age, euro, pct } from '../format';
 import { Empty, ErrorNotice, SignalBadge, useAsync } from '../ui';
 
 export function MarketWatch() {
   const { openProduct } = useShell();
   const [win, setWin] = useState<1 | 7 | 30>(1);
-  const signals = useAsync(() => api.get<OppList>('/api/opportunities?signalClass=MARKET_SIGNAL&limit=50'), []);
+  const signals = useAsync(() => api.get<OppList>('/api/opportunities?signalClass=MARKET_SIGNAL&limit=100'), []);
   const down = useAsync(() => api.get<Movers>(`/api/movers?window=${win}&dir=down&limit=15`), [win]);
   const up = useAsync(() => api.get<Movers>(`/api/movers?window=${win}&dir=up&limit=15`), [win]);
   const watch = useAsync(() => api.get<AlertItem[]>('/api/alerts?priority=WATCH&limit=30'), []);
@@ -24,15 +24,16 @@ export function MarketWatch() {
   ) : <Empty>Keine Daten.</Empty>);
   return (
     <>
-      <div className="page-head"><h1>Market Watch</h1><span className="sub">Preisentwicklungen und Auffälligkeiten – kein kaufbares Angebot</span>
+      <div className="page-head"><h1>Market Watch / Recherche</h1><span className="sub">Preisentwicklungen und Auffälligkeiten – kein kaufbares Angebot</span>
         <div className="actions"><select value={win} onChange={e => setWin(Number(e.target.value) as 1)}><option value={1}>1 Tag</option><option value={7}>7 Tage</option><option value={30}>30 Tage</option></select></div></div>
       <div className="grid cols-2" style={{ marginBottom: 16 }}>
         <div className="card"><div className="card-head"><h2>Stärkste Rückgänge</h2></div><ErrorNotice error={down.error} />{moverTable(down.data)}</div>
         <div className="card"><div className="card-head"><h2>Stärkste Anstiege</h2></div><ErrorNotice error={up.error} />{moverTable(up.data)}</div>
       </div>
       <div className="card" style={{ marginBottom: 16 }}>
-        <div className="card-head"><h2>Marktsignale</h2><a className="more" href="#/scanner">Alle im Scanner →</a></div>
-        {signals.data && (signals.data.items.length ? <OppTable items={signals.data.items} onOpen={o => openProduct(o.productId, o.key)} compact /> : <Empty>Keine Marktsignale.</Empty>)}
+        <div className="card-head"><h2>Marktsignale (Recherche)</h2><span className="small muted">Referenzwerte aus dem Price Guide – kein Einkaufspreis, kein belegter Gewinn</span></div>
+        {signals.data && (signals.data.items.length ? <MarketSignalTable items={signals.data.items} onOpen={o => openProduct(o.productId, o.key)} /> : <Empty>Keine Marktsignale.</Empty>)}
+        <p className="small muted" style={{ marginTop: 8 }}>Ein Marktsignal ist ein Rechercheauftrag: auf Cardmarket ein passendes Angebot suchen, es mit der Erweiterung erfassen – erst dann gibt es Einkaufspreis, Kosten und Gewinn.</p>
       </div>
       <div className="card">
         <div className="card-head"><h2>MARKET-WATCH-Alarme</h2></div>

@@ -259,7 +259,7 @@ describe('Kapital, Limits, Repricing, Priorität', () => {
     const g = guide({ trend: 86.43, avg1: 85, avg7: 84.75, avg30: 83.67 });
     const mk = (price: number, ageH: number) => buildOpportunity({
       product, finish: 'nonfoil', guide: g, history: [], strategy: 'underpriced_offer', signalClass: 'LIVE_OFFER',
-      buy: { price, shipping: null, label: 'x', observedAt: new Date(Date.now() - ageH * 36e5).toISOString(), source: 'extension', condition: 'NM', language: 'en', offerId: 9, offerUrl: null, seller: 'S', sellerCountry: 'Deutschland', sellerType: 'pro', sellerSales: 9999, amount: 1, previousPrice: null },
+      buy: { price, shipping: null, label: 'x', observedAt: new Date(Date.now() - ageH * 36e5).toISOString(), source: 'extension', condition: 'NM', language: 'en', offerId: 9, offerUrl: 'https://www.cardmarket.com/de/Magic/Products/Singles/Testset/Test-Dip-Card', seller: 'S', sellerCountry: 'Deutschland', sellerType: 'pro', sellerSales: 9999, amount: 1, previousPrice: null },
       triggers: [], exposure: buildExposure(db, s()), now: Date.now(),
     }, s());
     assert.equal(mk(50, 1).priority, 'HIGH');

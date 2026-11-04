@@ -3,14 +3,20 @@ import type { Db } from '../db/database.ts';
 import { nowIso } from '../db/database.ts';
 import { DEFAULT_SETTINGS, mergeSettings, type AppSettings } from '../domain/settings.ts';
 import { cardmarketCatalog, cardmarketPriceGuide } from '../providers/cardmarketS3.ts';
-import type { CatalogProvider, OfferProvider, PriceProvider } from '../providers/types.ts';
+import { cardtraderProvider } from '../providers/cardtrader.ts';
+import type { ListingProvider } from '../providers/listings.ts';
+import { mockListingProvider } from '../providers/mockListings.ts';
+import type { CatalogProvider, PriceProvider } from '../providers/types.ts';
 
 export interface Providers {
   catalog: CatalogProvider;
   prices: PriceProvider;
   scryfallBulkUrl: string;
-  /** Später: offiziell zugelassene Live-Angebotsquellen. Bewusst leer, solange keine Zulassung besteht. */
-  offers: OfferProvider[];
+  /**
+   * Angebotsgenaue Feeds. Registriert heißt nicht angeschlossen: jeder Feed meldet über readiness(),
+   * ob Token und Freigabe des Besitzers vorliegen. Eine Cardmarket-API ist nicht enthalten (keine Zulassung).
+   */
+  listings: ListingProvider[];
 }
 
 export class SettingsStore {
@@ -55,14 +61,22 @@ export interface AppContext {
 }
 
 export function createContext(db: Db, cfg: RuntimeConfig, providers?: Partial<Providers>): AppContext {
+  const settings = new SettingsStore(db);
+  const defaultListings = (): ListingProvider[] => {
+    const list: ListingProvider[] = [cardtraderProvider({ db, token: () => cfg.secrets.cardtraderToken, settings: () => settings.get().live.cardtrader })];
+    if (cfg.mockListingFeed) {
+      list.push(mockListingProvider(t => db.get<{ trend: number | null }>(
+        "SELECT trend FROM price_latest WHERE product_id = ? AND finish = ? AND source = 'cardmarket_price_guide'", [t.productId, t.finish])?.trend ?? null));
+    }
+    return list;
+  };
   return {
-    db, cfg,
-    settings: new SettingsStore(db),
+    db, cfg, settings,
     providers: {
       catalog: providers?.catalog ?? cardmarketCatalog(cfg.sources.productListUrl),
       prices: providers?.prices ?? cardmarketPriceGuide(cfg.sources.priceGuideUrl),
       scryfallBulkUrl: providers?.scryfallBulkUrl ?? cfg.sources.scryfallBulkUrl,
-      offers: providers?.offers ?? [],
+      listings: providers?.listings ?? defaultListings(),
     },
   };
 }

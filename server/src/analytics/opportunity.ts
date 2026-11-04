@@ -6,9 +6,25 @@ import type { AppSettings, Priority } from '../domain/settings.ts';
 import type { Exposure } from './rules.ts';
 import { shippingCost } from '../domain/shipping.ts';
 import {
-  STRATEGY_LABELS, type Finish, type GuidePrices, type ProductInfo, type Recommendation,
+  STRATEGY_LABELS, type Evidence, type Finish, type GuidePrices, type ProductInfo, type Recommendation,
   type SignalClass, type SnapshotPoint, type Strategy,
 } from '../domain/types.ts';
+
+export const SIGNAL_TAG: Record<SignalClass, string> = { MARKET_SIGNAL: 'MARKTSIGNAL', LIVE_OFFER: 'LIVE-ANGEBOT', SIMULATION: 'SIMULATION' };
+
+/** Quellen, die automatisch abgefragt werden (Listing-Feeds) – für sie gilt die strengere Frische-Grenze in Minuten. */
+export const isFeedSource = (source: string) => source.startsWith('api:') || source.startsWith('test:');
+
+/** Prüft die Pflichtangaben eines konkreten Angebots. */
+export function checkListing(buy: BuyBasis): { complete: boolean; missing: string[]; review: string[] } {
+  const missing: string[] = [];
+  if (!buy.seller) missing.push('Verkäufer');
+  if (!buy.offerUrl) missing.push('Link zum Angebot');
+  if (!buy.condition || buy.condition === 'MIX') missing.push('Zustand');
+  if (!buy.language) missing.push('Sprache');
+  if (isFeedSource(buy.source) && !buy.externalId) missing.push('Angebots-ID');
+  return { complete: missing.length === 0, missing, review: buy.reviewReasons ?? [] };
+}
 import { median, round1, round2 } from '../util/num.ts';
 import { breakEvenSellPrice, computeScenarios, maxBuyPrice, type ScenarioResults } from './profit.ts';
 import { estimateResale, type ResaleEstimate } from './resale.ts';
@@ -20,7 +36,11 @@ export interface BuyBasis {
   price: number;
   /** Porto je Karte; null = aus den Porto-Einstellungen schätzen. */
   shipping: number | null;
-  label: string;                // z. B. "Einzelangebot von X" / "1-Tages-Ø (Marktsignal)"
+  /** true = kein belegtes Angebot, nur ein Modellwert aus Marktstatistiken (Marktsignal). */
+  hypothetical?: boolean;
+  externalId?: string | null;   // Angebots-ID der Quelle (Listing-ID)
+  reviewReasons?: string[];     // Gründe, warum das Angebot vor einem Kauf geprüft werden muss
+  label: string;                // z. B. "Einzelangebot von X" / "Modellwert (hypothetisch): 1-Tages-Ø"
   observedAt: string;           // Zeitpunkt der Beobachtung bzw. Datenstand
   source: string;               // cardmarket_price_guide | extension | manual | simulation | api:*
   condition: string | null;
@@ -62,6 +82,14 @@ export interface Opportunity {
   imageUrl: string | null;
   finish: Finish;
   signalClass: SignalClass;
+  /** listing = belegtes Einzelangebot; market_model = Marktstatistik (keine Einkaufs-/Gewinnwerte anzeigen); simulation = Test. */
+  evidence: Evidence;
+  /** Kennzeichnung für Dashboard und Alarme: LIVE-ANGEBOT / MARKTSIGNAL / SIMULATION / VERALTET / TEST */
+  labels: string[];
+  stale: boolean;
+  staleReason: string | null;
+  /** Pflichtangaben eines Angebots (Verkäufer, Preis, Link, Zustand, Sprache, Angebots-ID) – fehlende → Prüfung statt Kauf. */
+  listingCheck: { complete: boolean; missing: string[]; review: string[] };
   strategy: Strategy;
   strategyLabel: string;
   buy: BuyBasis & { shipping: number; shippingNote: string; effective: number; capital: number };
@@ -165,16 +193,35 @@ export function buildOpportunity(inp: OpportunityInput, s: AppSettings): Opportu
     availableCapital: ex.availableCapital, slowSharePct: ex.slowSharePct,
   }, s);
 
-  // --- Empfehlung: ein Marktsignal ist NIE ein Kaufauftrag, weil kein kaufbares Angebot bekannt ist ---
+  // --- Belegt oder Modell? Frisch oder veraltet? ---
+  const evidence: Evidence = inp.signalClass === 'MARKET_SIGNAL' ? 'market_model' : inp.signalClass === 'SIMULATION' ? 'simulation' : 'listing';
+  const listingCheck = evidence === 'market_model' ? { complete: false, missing: ['kein konkretes Angebot'], review: [] } : checkListing(buy);
+  let staleReason: string | null = null;
+  if (guideAge == null) staleReason = 'kein Price Guide';
+  else if (guideAge > s.analysis.staleGuideHours) staleReason = `Price Guide ${Math.round(guideAge)} h alt`;
+  if (isOffer && offerAge != null) {
+    const feed = isFeedSource(buy.source);
+    const limitH = feed ? s.live.maxListingAgeMinutes / 60 : s.rules.maxOfferAgeHours;
+    if (offerAge > limitH) staleReason = `Angebot ${feed ? Math.round(offerAge * 60) + ' Min.' : Math.round(offerAge) + ' h'} alt (Grenze ${feed ? s.live.maxListingAgeMinutes + ' Min.' : limitH + ' h'})`;
+  }
+  const stale = staleReason != null;
+  const cons = scenarios.conservative;
+  const consOk = cons != null && cons.profit >= s.live.minConservativeProfit && (cons.roiPct ?? -Infinity) >= s.live.minConservativeRoiPct;
+
+  // --- Empfehlung: KAUFEN nur für ein konkretes, vollständiges, frisches Angebot; ein Marktsignal ist NIE ein Kaufauftrag ---
   let recommendation: Recommendation = 'NICHT KAUFEN';
-  if (inp.signalClass === 'LIVE_OFFER' && rules.passed) recommendation = 'KAUFEN';
-  else if (inp.signalClass === 'MARKET_SIGNAL' && rules.passed) recommendation = 'PRÜFEN';
+  if (inp.signalClass === 'LIVE_OFFER' && rules.passed) {
+    recommendation = listingCheck.complete && !listingCheck.review.length && !stale && consOk ? 'KAUFEN' : 'PRÜFEN';
+  } else if (inp.signalClass === 'MARKET_SIGNAL' && rules.passed) recommendation = 'PRÜFEN';
+
+  const labels = [SIGNAL_TAG[inp.signalClass]];
+  if (stale) labels.push('VERALTET');
+  if (buy.source.startsWith('test:')) labels.push('TEST');
 
   // --- Business-Priorität (2.1) ---
   const a = s.alerts;
-  const cons = scenarios.conservative;
   let priority: Priority | null = null;
-  if (inp.signalClass === 'LIVE_OFFER' && rules.passed) {
+  if (inp.signalClass === 'LIVE_OFFER' && recommendation === 'KAUFEN') {
     const high = offerAge != null && offerAge <= a.highMaxOfferAgeHours && cons != null && cons.profit >= a.highMinConservativeProfit &&
       (cons.roiPct ?? 0) >= a.highMinConservativeRoiPct && score.confidence >= a.highMinConfidence;
     priority = high ? 'HIGH' : 'MEDIUM';
@@ -184,11 +231,16 @@ export function buildOpportunity(inp: OpportunityInput, s: AppSettings): Opportu
 
   const reasons: string[] = [];
   if (holdings.copies + holdings.onOrder > 0) reasons.push(`Bereits ${holdings.copies} Exemplar(e) im Bestand${holdings.onOrder ? ` und ${holdings.onOrder} bestellt` : ''} (Grenze ${s.limits.maxCopiesPerCard}).`);
-  if (inp.signalClass === 'SIMULATION') reasons.push('SIMULATION – Testdaten, keine Kaufmöglichkeit.');
-  if (inp.signalClass === 'MARKET_SIGNAL') reasons.push('Marktsignal aus aggregierten Cardmarket-Daten – vor einem Kauf ein konkretes Angebot prüfen.');
+  if (inp.signalClass === 'SIMULATION') reasons.push(buy.source.startsWith('test:') ? 'SIMULATION (TEST-Feed) – erfundene Testdaten, keine Kaufmöglichkeit.' : 'SIMULATION – Testdaten, keine Kaufmöglichkeit.');
+  if (inp.signalClass === 'MARKET_SIGNAL') reasons.push('Marktsignal (Recherche) aus aggregierten Cardmarket-Daten: kein konkretes Angebot, daher weder Einkaufspreis noch belegter Gewinn. Vor einem Kauf ein konkretes Angebot erfassen.');
+  if (stale) reasons.push(`VERALTET: ${staleReason}.`);
+  if (evidence !== 'market_model' && listingCheck.missing.length) reasons.push(`Pflichtangaben fehlen: ${listingCheck.missing.join(', ')} → nur Prüfung, keine Kaufchance.`);
+  if (listingCheck.review.length) reasons.push(`Vor Kauf prüfen: ${listingCheck.review.join(', ')}.`);
+  if (inp.signalClass === 'LIVE_OFFER' && rules.passed && !consOk) reasons.push(`Konservatives Szenario unter der Mindestschwelle (${s.live.minConservativeProfit.toFixed(2)} € / ${s.live.minConservativeRoiPct} % ROI).`);
   reasons.push(...inp.triggers);
   const b = scenarios.base;
-  if (b) reasons.push(`Basisszenario: Verkauf ${b.sellPrice.toFixed(2)} € → Ertrag ${b.profit.toFixed(2)} € (ROI ${b.roiPct ?? '–'} %).`);
+  if (b && evidence === 'market_model') reasons.push(`Hypothetisches Modell: Bei einem Kauf zum Modellwert ${buy.price.toFixed(2)} € ergäbe sich rechnerisch ${b.profit.toFixed(2)} € – kein Angebot zu diesem Preis belegt.`);
+  else if (b) reasons.push(`Basisszenario: Verkauf ${b.sellPrice.toFixed(2)} € → Ertrag ${b.profit.toFixed(2)} € (ROI ${b.roiPct ?? '–'} %).`);
   if (rules.smallProfitMode) reasons.push('Small-Profit-Modus: kleiner Ertrag bei geringer Kapitalbindung.');
   if (score.capped) reasons.push(`Score gedeckelt (max. ${s.analysis.lowConfidenceScoreCap}), weil Confidence ${score.confidence} < ${s.rules.minConfidence}.`);
   reasons.push(...score.confidenceNotes.map(n => n[0].toUpperCase() + n.slice(1) + '.'));
@@ -203,7 +255,8 @@ export function buildOpportunity(inp: OpportunityInput, s: AppSettings): Opportu
     productId: product.id, externalId: product.externalId, name: product.name,
     setName: product.setName, setCode: product.setCode, collectorNumber: product.collectorNumber,
     rarity: product.rarity, imageUrl: product.imageUrl, finish: inp.finish,
-    signalClass: inp.signalClass, strategy: inp.strategy, strategyLabel: STRATEGY_LABELS[inp.strategy],
+    signalClass: inp.signalClass, evidence, labels, stale, staleReason, listingCheck,
+    strategy: inp.strategy, strategyLabel: STRATEGY_LABELS[inp.strategy],
     buy: { ...buy, shipping: round2(shipping), shippingNote, effective, capital },
     marketPrice: g.trend, referencePrice, discountPct,
     resale, scenarios, breakEvenSellPrice: be, maxBuyPrice: mb,
